@@ -48,8 +48,8 @@ struct nk_pf_error {
             uint8_t rsvd_bit: 1;
             uint8_t ifetch  : 1;
             uint32_t rsvd   : 27;
-        };
-    };
+        } __packed;
+    } __packed;
 } __packed;
 
 
