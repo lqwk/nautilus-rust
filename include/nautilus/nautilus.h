@@ -237,6 +237,7 @@ nk_get_nautilus_info (void)
     return &nautilus_info;
 }
 
+#ifndef BINDGEN_ELIDE_MAIN
 #ifdef NAUT_CONFIG_XEON_PHI
 #include <arch/k1om/main.h>
 #elif defined NAUT_CONFIG_HVM_HRT
@@ -247,6 +248,7 @@ nk_get_nautilus_info (void)
 #include <arch/gem5/main.h>
 #else
 #error "Unsupported architecture"
+#endif
 #endif
 
 #ifdef __cplusplus
