@@ -14,8 +14,9 @@
 
 extern crate alloc;
 mod example;
+mod parport;
 pub mod nk_alloc;
 pub mod nk_bindings;
 pub mod nk_panic;
-pub mod nk_shell_cmd;
+//pub mod nk_shell_cmd;
 pub mod utils;

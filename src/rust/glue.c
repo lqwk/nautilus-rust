@@ -4,7 +4,7 @@
 // Rust function we will call from C
 extern int example_shell_entry(char *, void *);
 
-static struct shell_cmd_impl rust_impl = {
+static struct shell_cmd_impl rust_example_impl = {
     .cmd = "rust",
     .help_str = "rust",
     .handler = example_shell_entry,
@@ -12,4 +12,14 @@ static struct shell_cmd_impl rust_impl = {
 
 // note that this is currently a macro, and cannot
 // be called using the Rust FFI
-nk_register_shell_cmd(rust_impl);
+nk_register_shell_cmd(rust_example_impl);
+
+
+// parport
+extern int parport_shell_entry(char *, void *);
+static struct shell_cmd_impl rust_parport_impl = {
+    .cmd = "parport",
+    .help_str = "parport",
+    .handler = parport_shell_entry,
+};
+nk_register_shell_cmd(rust_parport_impl);
