@@ -44,6 +44,8 @@
 #ifndef __ACTYPES_H__
 #define __ACTYPES_H__
 
+#include <nautilus/naut_types.h>
+
 /* acpisrc:struct_defs -- for acpisrc conversion */
 
 /*

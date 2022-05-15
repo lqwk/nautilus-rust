@@ -26,6 +26,7 @@
 #include <acpi/acpi.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/acpi-x86_64.h>
+#include <nautilus/printk.h>
 
 #define MP_TAB_TYPE_CPU    0
 #define MP_TAB_TYPE_BUS    1

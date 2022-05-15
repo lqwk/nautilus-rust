@@ -25,6 +25,7 @@
 #define __NK_ASPACE
 
 #include <nautilus/idt.h>
+#include <nautilus/list.h>
 
 typedef struct nk_aspace_characteristics {
     uint64_t   granularity;     // smallest unit of control (bytes)
