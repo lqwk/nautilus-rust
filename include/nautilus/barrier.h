@@ -41,11 +41,11 @@ struct nk_barrier {
 
     uint8_t  active; /* used for core barriers */
 
-    uint8_t pad[52];
+    uint8_t pad[51];
 
     /* this is on another cache line (Assuming 64b) */
     volatile unsigned notify;
-} __attribute__ ((packed)) __attribute((aligned(64)));
+} __attribute((aligned(64)));
 
 int nk_barrier_init (nk_barrier_t * barrier, uint32_t count);
 int nk_barrier_destroy (nk_barrier_t * barrier);
