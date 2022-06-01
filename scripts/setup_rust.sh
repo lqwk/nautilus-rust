@@ -2,7 +2,7 @@
 export PATH=$PATH:/home/software/qemu4/bin
 
 # install rustup
-curl https://sh.rustup.rs -sSf | sh
+curl https://sh.rustup.rs -sSf | sh -s -- -y
 
 # setup path
 source ~/.cargo/env
