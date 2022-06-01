@@ -21,3 +21,7 @@ panic = "abort" # no stack unwind on rust panic
 
 [build-dependencies]
 bindgen = "0.59.2"
+
+[dependencies]
+bitfield = "0.13.2"
+x86_64 = "0.14.9"
