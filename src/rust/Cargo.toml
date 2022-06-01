@@ -1,6 +1,8 @@
+
 [package]
 name = "nk_rust" # this is for core-kernel
 version = "0.0.0"
+edition = "2021"
 authors = [
     "Michael Polinski <michaelp@u.northwestern.edu>",
     "Hanming Wang <hanmingwang2022@u.northwestern.edu>",
