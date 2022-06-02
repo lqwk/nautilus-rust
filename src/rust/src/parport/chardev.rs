@@ -27,13 +27,13 @@ impl<'a> NkCharDev<'a> {
     }
 
     pub fn new() -> Result<Self, Error> {
-        unimplemented!()
+        // TODO: register
     }
 
     // does this function need to be `unsafe`?
     unsafe fn nk_char_dev_register(
         name: &str,
-        parport: &'a Parport,
+        parport: &'a mut Parport,
     ) -> Result<NonNull<nk_bindings::nk_char_dev>, Error> {
         let name_bytes = to_c_string(name);
         let parport_ptr = parport as *const Parport;

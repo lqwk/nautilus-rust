@@ -53,6 +53,7 @@ struct Parport<'a> {
     port: ParportIO,
     irq: Irq,
     state: ParportStatus,
+    // TODO: lock parport internally
 }
 
 //unsafe impl Sync for Parport {}
@@ -80,6 +81,7 @@ impl<'a> Parport<'a> {
 }
 
 fn discover_and_bringup_devices() -> Result<(), Error> {
+    // TODO: initialize parport
     unimplemented!()
 }
 
