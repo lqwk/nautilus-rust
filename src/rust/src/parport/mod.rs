@@ -8,6 +8,8 @@ use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
 
+pub mod nk_shell_cmd;
+
 mod chardev;
 mod irq;
 mod portio;

@@ -1,4 +1,4 @@
-use super::nk_rust_parport;
+use super::nk_parport_init;
 use core::ffi::{c_char, c_int, c_void};
 
 // this handler function can be called from the shell after registering it
