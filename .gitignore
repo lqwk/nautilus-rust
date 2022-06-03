@@ -20,3 +20,6 @@ tags
 /scripts/format_syms
 /.kconfig.d
 /nautilus.secs
+
+
+parport.out

@@ -26,7 +26,7 @@ bitfield! {
   sel, _: 4;
   pout, _: 5;
   ack, _: 6;
-  busy, _: 7;
+  busy, set_busy: 7;
 }
 
 bitfield! {
@@ -49,10 +49,11 @@ enum ParportStatus {
     Busy,
 }
 
-// struct Parport<'a> {
+// pub struct Parport<'a> {
+    // dev: Option<NkCharDev<'a>>,
+
 pub struct Parport {
-    // TODO: store chardev ptr
-    // dev: NkCharDev<'a>,
+    dev: Option<NkCharDev>,
     port: ParportIO,
     irq: Irq,
     state: ParportStatus,
@@ -63,9 +64,11 @@ pub struct Parport {
 //unsafe impl Send for Parport {}
 
 // impl<'a> Parport<'a> {
+
 impl Parport {
     pub fn new(port: ParportIO, irq: Irq, name: &str) -> Result<Self, Error> {
         Ok(Parport {
+            dev: None,
             port: port,
             irq: irq,
             state: ParportStatus::Ready,
@@ -99,7 +102,9 @@ fn discover_and_bringup_devices() -> Result<(), Error> {
             name
         ).unwrap();
 
-        nk_char_dev_register(name, &mut parport);
+        let r = nk_char_dev_register(name, &mut parport).unwrap();
+
+        // parport.dev =
     }
 
     Ok(())

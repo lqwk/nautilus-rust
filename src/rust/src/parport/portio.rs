@@ -18,14 +18,23 @@ impl ParportIO {
     pub fn read_data(&mut self) -> u8 {
         unsafe { u8::read_from_port(self.data_port) }
     }
+    pub fn write_data(&mut self, data: u8) {
+        unsafe { u8::write_to_port(self.data_port, data) }
+    }
+
+
     pub fn read_stat(&mut self) -> u8 {
         unsafe { u8::read_from_port(self.stat_port) }
     }
+    pub fn write_stat(&mut self, data: u8) {
+        unsafe { u8::write_to_port(self.stat_port, data) }
+    }
+
+
     pub fn read_ctrl(&mut self) -> u8 {
         unsafe { u8::read_from_port(self.ctrl_port) }
     }
-
-    pub fn write_data(&mut self, data: u8) {
-        unsafe { u8::write_to_port(self.data_port, data) }
+    pub fn write_ctrl(&mut self, data: u8) {
+        unsafe { u8::write_to_port(self.ctrl_port, data) }
     }
 }
