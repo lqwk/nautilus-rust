@@ -10,6 +10,7 @@ use core::{
 
 use alloc::string::String;
 
+use crate::utils::print_to_vc;
 use crate::{nk_bindings, utils::to_c_string};
 
 use super::Parport;
@@ -27,29 +28,7 @@ impl<'a> NkCharDev<'a> {
     }
 
     pub fn new() -> Result<Self, Error> {
-        // TODO: register
-    }
-
-    // does this function need to be `unsafe`?
-    unsafe fn nk_char_dev_register(
-        name: &str,
-        parport: &'a mut Parport,
-    ) -> Result<NonNull<nk_bindings::nk_char_dev>, Error> {
-        let name_bytes = to_c_string(name);
-        let parport_ptr = parport as *const Parport;
-        let cd = &CHARDEV_INTERFACE as *const nk_bindings::nk_char_dev_int;
-        let r;
-        unsafe {
-            r = nk_bindings::nk_char_dev_register(
-                name_bytes,
-                0,
-                // not actually mutable, but C code had no `const` qualifier
-                cd as *mut nk_bindings::nk_char_dev_int,
-                // not actually mutable, but C code had no `const` qualifier
-                parport_ptr as *mut Parport as *mut c_void,
-            );
-        }
-        NonNull::new(r).ok_or(Error)
+        unimplemented!()
     }
 }
 
@@ -63,17 +42,19 @@ impl<'a> Drop for NkCharDev<'a> {
 }
 
 pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
+    print_to_vc("status!\n");
     let p = state as *const Parport;
     let p = unsafe { p.as_ref() }.unwrap();
-
     unimplemented!()
 }
 
 pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
+    print_to_vc("read!\n");
     unimplemented!()
 }
 
 pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
+    print_to_vc("write!\n");
     unimplemented!()
 }
 
@@ -86,6 +67,30 @@ pub unsafe extern "C" fn get_characteristics(
         write_bytes(c, 0, 1);
     }
     0
+}
+
+// does this function need to be `unsafe`?
+pub unsafe fn nk_char_dev_register(
+    name: &str,
+    parport: &mut Parport,
+) -> Result<NonNull<nk_bindings::nk_char_dev>, Error> {
+    print_to_vc("register device\n");
+
+    let name_bytes = to_c_string(name);
+    let parport_ptr = parport as *const Parport;
+    let cd = &CHARDEV_INTERFACE as *const nk_bindings::nk_char_dev_int;
+    let r;
+    unsafe {
+        r = nk_bindings::nk_char_dev_register(
+            name_bytes,
+            0,
+            // not actually mutable, but C code had no `const` qualifier
+            cd as *mut nk_bindings::nk_char_dev_int,
+            // not actually mutable, but C code had no `const` qualifier
+            parport_ptr as *mut Parport as *mut c_void,
+        );
+    }
+    NonNull::new(r).ok_or(Error)
 }
 
 const CHARDEV_INTERFACE: nk_bindings::nk_char_dev_int = nk_bindings::nk_char_dev_int {

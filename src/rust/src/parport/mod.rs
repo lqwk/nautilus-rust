@@ -4,9 +4,10 @@ use core::fmt::Error;
 use alloc::string::String;
 use bitfield::bitfield;
 
-use chardev::NkCharDev;
+use chardev::{NkCharDev, nk_char_dev_register};
 use irq::Irq;
 use portio::ParportIO;
+use crate::utils::print_to_vc;
 
 pub mod nk_shell_cmd;
 
@@ -48,8 +49,10 @@ enum ParportStatus {
     Busy,
 }
 
-struct Parport<'a> {
-    dev: NkCharDev<'a>,
+// struct Parport<'a> {
+pub struct Parport {
+    // TODO: store chardev ptr
+    // dev: NkCharDev<'a>,
     port: ParportIO,
     irq: Irq,
     state: ParportStatus,
@@ -58,9 +61,15 @@ struct Parport<'a> {
 
 //unsafe impl Sync for Parport {}
 //unsafe impl Send for Parport {}
-impl<'a> Parport<'a> {
-    pub unsafe fn new(port: ParportIO, irq: Irq, name: &str) -> Result<Self, Error> {
-        unimplemented!()
+
+// impl<'a> Parport<'a> {
+impl Parport {
+    pub fn new(port: ParportIO, irq: Irq, name: &str) -> Result<Self, Error> {
+        Ok(Parport {
+            port: port,
+            irq: irq,
+            state: ParportStatus::Ready,
+        })
     }
 
     fn write(self, data: u8) {
@@ -72,7 +81,7 @@ impl<'a> Parport<'a> {
     }
 
     fn get_name(self) -> String {
-        self.dev.get_name()
+        unimplemented!()
     }
 
     fn is_ready(self) -> bool {
@@ -81,12 +90,24 @@ impl<'a> Parport<'a> {
 }
 
 fn discover_and_bringup_devices() -> Result<(), Error> {
-    // TODO: initialize parport
-    unimplemented!()
+    let name = "parport0";
+
+    unsafe {
+        let mut parport = Parport::new(
+            ParportIO::new(PARPORT0_BASE),
+            Irq::new(PARPORT0_IRQ.into()),
+            name
+        ).unwrap();
+
+        nk_char_dev_register(name, &mut parport);
+    }
+
+    Ok(())
 }
 
 #[no_mangle]
 pub extern "C" fn nk_parport_init() -> c_int {
+    print_to_vc("partport init\n");
     if discover_and_bringup_devices().is_err() {
         -1
     } else {

@@ -10,7 +10,9 @@ pub struct Irq {
 
 impl Irq {
     pub unsafe fn new(num: u16) -> Self {
-        unimplemented!()
+        Irq {
+            num: num
+        }
     }
 
     unsafe fn register_irq_handler(num: u16, parport: &Parport) {
