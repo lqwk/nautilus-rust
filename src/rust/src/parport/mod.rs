@@ -4,10 +4,10 @@ use core::fmt::Error;
 use alloc::string::String;
 use bitfield::bitfield;
 
-use chardev::{NkCharDev, nk_char_dev_register};
+use crate::utils::print_to_vc;
+use chardev::{nk_char_dev_register, NkCharDev};
 use irq::Irq;
 use portio::ParportIO;
-use crate::utils::print_to_vc;
 
 pub mod nk_shell_cmd;
 
@@ -50,7 +50,7 @@ enum ParportStatus {
 }
 
 // pub struct Parport<'a> {
-    // dev: Option<NkCharDev<'a>>,
+// dev: Option<NkCharDev<'a>>,
 
 pub struct Parport {
     dev: Option<NkCharDev>,
@@ -75,12 +75,30 @@ impl Parport {
         })
     }
 
-    fn write(self, data: u8) {
+    fn wait_for_attached_device(&self) {
         unimplemented!()
     }
 
-    fn read(self) -> u8 {
+    // don't use read_write here since the mutabilities of data are different
+
+    fn write(&mut self, data: &mut u8) -> i32 {
         unimplemented!()
+    }
+
+    fn read(&mut self, data: &u8) -> i32 {
+        unimplemented!()
+    }
+
+    fn status(&self) -> i32 {
+        unimplemented!()
+    }
+
+    fn interupt_handler(&mut self) -> i32 {
+        unimplemented!()
+    }
+
+    fn init(&self) -> i32 {
+
     }
 
     fn get_name(self) -> String {
@@ -92,6 +110,17 @@ impl Parport {
     }
 }
 
+// TODO: macros
+// TODO: static struct nk_char_dev_int interface
+
+pub fn nk_parport_init() -> c_int {
+    if discover_and_bringup_devices().is_ok() {
+        0
+    } else {
+        1
+    }
+}
+
 fn discover_and_bringup_devices() -> Result<(), Error> {
     let name = "parport0";
 
@@ -99,8 +128,9 @@ fn discover_and_bringup_devices() -> Result<(), Error> {
         let mut parport = Parport::new(
             ParportIO::new(PARPORT0_BASE),
             Irq::new(PARPORT0_IRQ.into()),
-            name
-        ).unwrap();
+            name,
+        )
+        .unwrap();
 
         let r = nk_char_dev_register(name, &mut parport).unwrap();
 
