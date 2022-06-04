@@ -98,7 +98,7 @@ impl Parport {
     }
 
     fn init(&self) -> i32 {
-
+        unimplemented!()
     }
 
     fn get_name(self) -> String {
