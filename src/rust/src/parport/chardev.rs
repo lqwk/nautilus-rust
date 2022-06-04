@@ -13,9 +13,8 @@ use alloc::string::String;
 use crate::utils::print_to_vc;
 use crate::{nk_bindings, utils::to_c_string};
 
-use super::{Parport, StatReg, CtrlReg};
+use super::{Parport, StatReg};
 
-// pub struct NkCharDev<'a> {
 pub struct NkCharDev {
     dev: NonNull<nk_bindings::nk_char_dev>,
 }
@@ -44,39 +43,38 @@ pub unsafe fn nk_char_dev_register(
     NonNull::new(r).ok_or(Error)
 }
 
-// impl<'a> NkCharDev<'a>
 impl NkCharDev {
-    // pub fn get_name(&self) -> String {
-    //     let name = &self.dev.dev.name[..];
-    //     // have [i8], want [u8] - safe in this context
-    //     let s = unsafe { &*(name as *const [i8] as *const [u8]) };
-    //     String::from_utf8_lossy(s).into_owned()
-    // }
+    pub fn get_name(&self) -> String {
+        // guaranteed to point to a valid nk_char_dev as created by `new()`
+        let name = &unsafe { self.dev.as_ref() }.dev.name[..];
+        // have [i8], want [u8] - safe in this context
+        let s = unsafe { &*(name as *const [i8] as *const [u8]) };
+        String::from_utf8_lossy(s).into_owned()
+    }
 
     pub fn new(dev: NonNull<nk_bindings::nk_char_dev>) -> Result<Self, Error> {
-        Ok(
-            NkCharDev {
-                dev: dev
-            }
-        )
+        Ok(NkCharDev { dev: dev })
     }
 }
 
-// impl<'a> Drop for NkCharDev<'a> {
-// impl Drop for NkCharDev {
-//     fn drop(&mut self) {
-//         let ptr = self.dev as *mut nk_bindings::nk_char_dev;
-//         unsafe {
-//             nk_bindings::nk_char_dev_unregister(ptr);
-//         }
-//     }
-// }
+impl Drop for NkCharDev {
+    fn drop(&mut self) {
+        let ptr = unsafe { self.dev.as_mut() } as *mut nk_bindings::nk_char_dev;
+        unsafe {
+            nk_bindings::nk_char_dev_unregister(ptr);
+        }
+    }
+}
 
 pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
-    print_to_vc("status!\n");
-    let p = state as *const Parport;
-    let p = unsafe { p.as_ref() }.unwrap();
-    2  // NK_CHARDEV_WRITEABLE
+    let p = state as *mut Parport;
+    // TODO: fix this mess
+    let p: &Parport = unsafe { p.as_ref() }.unwrap();
+    if p.is_ready() {
+        CHARDEV_RW
+    } else {
+        0
+    }
 }
 
 pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
@@ -86,38 +84,15 @@ pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
 
 pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
     print_to_vc("write!\n");
-
     let p = state as *mut Parport;
-    let mut p: &mut Parport = unsafe { p.as_mut() }.unwrap();
-
-    unsafe {
-        // mark device as busy
-        print_to_vc("setting device as busy\n");
-        let mut stat = StatReg(p.port.read_stat());
-        stat.set_busy(false);   // stat.busy = 0
-        p.port.write_stat(stat.0);
-
-        // set device to output mode
-        print_to_vc("setting device to output mode\n");
-        let mut ctrl = CtrlReg(p.port.read_ctrl());
-        ctrl.set_bidir_en(false);  // ctrl.bidir_en = 0
-        p.port.write_ctrl(ctrl.0);
-
-        // write data byte to data register
-        print_to_vc("writing data to device\n");
-        p.port.write_data(*src);
-
-        // strobe the attached printer
-        print_to_vc("strobing device\n");
-        ctrl.set_strobe(false);   // ctrl.strobe = 0
-        p.port.write_ctrl(ctrl.0);
-        ctrl.set_strobe(true);    // ctrl.strobe = 1
-        p.port.write_ctrl(ctrl.0);
-        ctrl.set_strobe(false);   // ctrl.strobe = 0
-        p.port.write_ctrl(ctrl.0);
+    // TODO: fix this mess
+    let p: &mut Parport = unsafe { p.as_mut() }.unwrap();
+    let byte = unsafe { *src };
+    if p.write(byte).is_ok() {
+        1 // success
+    } else {
+        0 // failure
     }
-
-    0
 }
 
 pub unsafe extern "C" fn get_characteristics(

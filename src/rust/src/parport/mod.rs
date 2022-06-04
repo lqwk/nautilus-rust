@@ -4,10 +4,10 @@ use core::fmt::Error;
 use alloc::string::String;
 use bitfield::bitfield;
 
-use chardev::{NkCharDev, nk_char_dev_register};
+use crate::{nk_bindings, utils::print_to_vc};
+use chardev::{nk_char_dev_register, NkCharDev};
 use irq::Irq;
 use portio::ParportIO;
-use crate::utils::print_to_vc;
 
 pub mod nk_shell_cmd;
 
@@ -19,18 +19,18 @@ const PARPORT0_BASE: u16 = 0x378;
 const PARPORT0_IRQ: u8 = 7;
 
 bitfield! {
-  struct StatReg(u8);
-  reserved, _: 1, 0;
-  irq, _: 2;
-  err, _: 3;
-  sel, _: 4;
-  pout, _: 5;
-  ack, _: 6;
-  busy, set_busy: 7;
+    pub struct StatReg(u8);
+    reserved, _: 1, 0;
+    irq, _: 2;
+    err, _: 3;
+    sel, _: 4;
+    pout, _: 5;
+    ack, _: 6;
+    busy, set_busy: 7;
 }
 
 bitfield! {
-struct CtrlReg(u8);
+    pub struct CtrlReg(u8);
     strobe, set_strobe : 0;     // attached device strobe line - alert device to data (0->1->0)
     autolf, set_autolf : 1;     // attached device autolf line - auomatically add linefeeds to carriage returns (if 1)
     init, set_init : 2;         // attached device init line - init attached device (if 0)
@@ -40,20 +40,44 @@ struct CtrlReg(u8);
     reserved, _ : 7, 6;         // reserved
 }
 
-struct DataReg {
+pub struct DataReg {
     data: u8,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum ParportStatus {
     Ready,
     Busy,
 }
 
-// pub struct Parport<'a> {
-    // dev: Option<NkCharDev<'a>>,
+pub struct ParportLock {
+    spinlock: nk_bindings::spinlock_t,
+    state_flags: u8,
+    parport: Parport,
+}
+
+impl ParportLock {
+    pub fn new(parport: Parport) -> Self {
+        let p = ParportLock {
+            spinlock: 0,
+            state_flags: 0,
+            parport,
+        };
+        unsafe { nk_bindings::spinlock_init(&mut p.spinlock as *mut u32) };
+        p
+    }
+
+    pub fn lock(&self) -> &Parport {
+        unimplemented!()
+    }
+
+    pub fn lock_mut(&self) -> &mut Parport {
+        unimplemented!()
+    }
+}
 
 pub struct Parport {
-    dev: Option<NkCharDev>,
+    dev: NkCharDev,
     port: ParportIO,
     irq: Irq,
     state: ParportStatus,
@@ -62,8 +86,6 @@ pub struct Parport {
 
 //unsafe impl Sync for Parport {}
 //unsafe impl Send for Parport {}
-
-// impl<'a> Parport<'a> {
 
 impl Parport {
     pub fn new(port: ParportIO, irq: Irq, name: &str) -> Result<Self, Error> {
@@ -75,37 +97,64 @@ impl Parport {
         })
     }
 
-    fn write(self, data: u8) {
+    pub fn write(&mut self, data: u8) -> Result<(), Error> {
+        if !self.is_ready() {
+            return Err(Error);
+        }
+        self.state = ParportStatus::Busy;
+
+        // mark device as busy
+        print_to_vc("setting device as busy\n");
+        let mut stat = self.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        self.port.write_stat(&stat);
+
+        // set device to output mode
+        print_to_vc("setting device to output mode\n");
+        let mut ctrl = self.port.read_ctrl();
+        ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
+        self.port.write_ctrl(&ctrl);
+
+        // write data byte to data register
+        print_to_vc("writing data to device\n");
+        self.port.write_data(&DataReg { data });
+
+        // strobe the attached printer
+        print_to_vc("strobing device\n");
+        ctrl.set_strobe(false); // ctrl.strobe = 0
+        self.port.write_ctrl(&ctrl);
+        ctrl.set_strobe(true); // ctrl.strobe = 1
+        self.port.write_ctrl(&ctrl);
+        ctrl.set_strobe(false); // ctrl.strobe = 0
+        self.port.write_ctrl(&ctrl);
+
+        Ok(())
+    }
+
+    fn read(&mut self) -> u8 {
         unimplemented!()
     }
 
-    fn read(self) -> u8 {
-        unimplemented!()
+    fn get_name(&self) -> String {
+        self.dev.get_name()
     }
 
-    fn get_name(self) -> String {
-        unimplemented!()
-    }
-
-    fn is_ready(self) -> bool {
-        unimplemented!()
+    fn is_ready(&self) -> bool {
+        self.state == ParportStatus::Ready
     }
 }
 
 fn discover_and_bringup_devices() -> Result<(), Error> {
     let name = "parport0";
 
-    unsafe {
-        let mut parport = Parport::new(
-            ParportIO::new(PARPORT0_BASE),
-            Irq::new(PARPORT0_IRQ.into()),
-            name
-        ).unwrap();
+    let port = unsafe { ParportIO::new(PARPORT0_BASE) };
+    let irq = unsafe { Irq::new(PARPORT0_IRQ.into()) };
 
-        let r = nk_char_dev_register(name, &mut parport).unwrap();
+    Parport::new(port, irq, name)?;
 
-        // parport.dev =
-    }
+    //let r = nk_char_dev_register(name, &mut parport).unwrap();
+
+    // parport.dev =
 
     Ok(())
 }
