@@ -13,6 +13,7 @@ pub mod nk_shell_cmd;
 
 mod chardev;
 mod irq;
+mod lock;
 mod portio;
 
 const PARPORT0_BASE: u16 = 0x378;

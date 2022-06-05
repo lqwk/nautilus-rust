@@ -1,6 +1,6 @@
-use lock_api::{GuardSend, RawMutex};
-
 use crate::nk_bindings;
+use core::cell::UnsafeCell;
+use lock_api::{GuardSend, RawMutex};
 
 extern "C" {
     fn spin_lock_irq(lock: *mut nk_bindings::spinlock_t) -> u8;
@@ -10,21 +10,34 @@ extern "C" {
 pub type IRQLock<T> = lock_api::Mutex<NkIrqLock, T>;
 pub type IRQLockGuard<'a, T> = lock_api::MutexGuard<'a, NkIrqLock, T>;
 
-// deriving default because `spinlock_init()` simply sets the
-// given `u32` to 0, and `state_flags` can have an arbitrary initial value
-#[derive(Debug, Default)]
-struct NkIrqLock {
-    spinlock: nk_bindings::spinlock_t,
-    state_flags: u8,
+pub struct NkIrqLock {
+    spinlock: UnsafeCell<nk_bindings::spinlock_t>,
+    state_flags: UnsafeCell<u8>,
+}
+
+impl NkIrqLock {
+    // `spinlock_init()` simply sets the given `u32` to 0
+    // `state_flags` can have an arbitrary initial value
+    const fn new() -> Self {
+        NkIrqLock {
+            spinlock: UnsafeCell::new(0),
+            state_flags: UnsafeCell::new(0),
+        }
+    }
 }
 
 unsafe impl RawMutex for NkIrqLock {
-    const INIT: NkIrqLock = NkIrqLock::default();
+    #[allow(clippy::declare_interior_mutable_const)]
+    const INIT: NkIrqLock = NkIrqLock::new();
+
     type GuardMarker = GuardSend;
 
     fn lock(&self) {
-        let lock_ptr = &mut self.spinlock as *mut u32;
-        self.state_flags = unsafe { spin_lock_irq(lock_ptr) };
+        let lock_ptr = self.spinlock.get();
+        unsafe {
+            // thread safety guaranteed by the lock itself
+            *self.state_flags.get() = spin_lock_irq(lock_ptr);
+        }
     }
 
     fn try_lock(&self) -> bool {
@@ -32,7 +45,10 @@ unsafe impl RawMutex for NkIrqLock {
     }
 
     unsafe fn unlock(&self) {
-        let lock_ptr = &mut self.spinlock as *mut u32;
-        unsafe { spin_unlock_irq(lock_ptr, self.state_flags) };
+        let lock_ptr = self.spinlock.get();
+        unsafe {
+            // thread safety guaranteed by the lock itself
+            spin_unlock_irq(lock_ptr, *self.state_flags.get());
+        }
     }
 }
