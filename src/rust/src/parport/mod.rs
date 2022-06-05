@@ -13,11 +13,15 @@ pub mod nk_shell_cmd;
 
 mod chardev;
 mod irq;
-mod lock;
 mod portio;
 
 const PARPORT0_BASE: u16 = 0x378;
 const PARPORT0_IRQ: u8 = 7;
+
+extern "C" {
+    fn spin_lock_irq(lock: *mut nk_bindings::spinlock_t) -> u8;
+    fn spin_unlock_irq(lock: *mut nk_bindings::spinlock_t, flags: u8);
+}
 
 bitfield! {
     pub struct StatReg(u8);
@@ -52,11 +56,12 @@ enum ParportStatus {
 }
 
 pub struct Parport {
-    dev: NkCharDev,
+    dev: Option<NkCharDev>,
     port: ParportIO,
     irq: Irq,
     state: ParportStatus,
-    // TODO: lock parport internally
+    spinlock: nk_bindings::spinlock_t,
+    state_flags: core::ffi::c_uchar,
 }
 
 //unsafe impl Sync for Parport {}
@@ -69,7 +74,19 @@ impl Parport {
             port: port,
             irq: irq,
             state: ParportStatus::Ready,
+            spinlock: 0,
+            state_flags: 0,
         })
+    }
+
+    fn lock(&mut self) {
+        let lock_ptr = &mut self.spinlock;
+        self.state_flags = unsafe { spin_lock_irq(lock_ptr) };
+    }
+
+    fn unlock(&mut self) {
+        let lock_ptr = &mut self.spinlock;
+        unsafe { spin_unlock_irq(lock_ptr, self.state_flags) };
     }
 
     pub fn write(&mut self, data: u8) -> Result<(), Error> {
@@ -111,7 +128,7 @@ impl Parport {
     }
 
     fn get_name(&self) -> String {
-        self.dev.get_name()
+        self.dev.as_ref().unwrap().get_name()
     }
 
     fn is_ready(&self) -> bool {
