@@ -4,9 +4,9 @@ use x86_64::instructions::port::{PortRead, PortWrite};
 const DELAY_PORT: u16 = 0x80;
 
 pub struct ParportIO {
-    data_port: u16,
-    stat_port: u16,
-    ctrl_port: u16,
+    pub data_port: u16,
+    pub stat_port: u16,
+    pub ctrl_port: u16,
 }
 
 impl ParportIO {

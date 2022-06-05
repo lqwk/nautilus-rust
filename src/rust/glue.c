@@ -1,6 +1,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/cpu.h>
 
 // Rust function we will call from C
 extern int example_shell_entry(char *, void *);
