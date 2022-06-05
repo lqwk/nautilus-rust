@@ -13,6 +13,7 @@ pub mod nk_shell_cmd;
 
 mod chardev;
 mod irq;
+mod lock;
 mod portio;
 
 const PARPORT0_BASE: u16 = 0x378;
@@ -48,32 +49,6 @@ pub struct DataReg {
 enum ParportStatus {
     Ready,
     Busy,
-}
-
-pub struct ParportLock {
-    spinlock: nk_bindings::spinlock_t,
-    state_flags: u8,
-    parport: Parport,
-}
-
-impl ParportLock {
-    pub fn new(parport: Parport) -> Self {
-        let p = ParportLock {
-            spinlock: 0,
-            state_flags: 0,
-            parport,
-        };
-        unsafe { nk_bindings::spinlock_init(&mut p.spinlock as *mut u32) };
-        p
-    }
-
-    pub fn lock(&self) -> &Parport {
-        unimplemented!()
-    }
-
-    pub fn lock_mut(&self) -> &mut Parport {
-        unimplemented!()
-    }
 }
 
 pub struct Parport {

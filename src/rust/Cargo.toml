@@ -25,3 +25,4 @@ bindgen = "0.59.2"
 [dependencies]
 bitfield = "0.13.2"
 x86_64 = "0.14.9"
+lock_api = "0.4.7"
