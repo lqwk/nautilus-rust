@@ -5,9 +5,11 @@ use alloc::string::String;
 use bitfield::bitfield;
 
 use crate::{nk_bindings, utils::print_to_vc};
-use chardev::{nk_char_dev_register, NkCharDev};
+use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
+
+use self::portio::io_delay;
 
 pub mod nk_shell_cmd;
 
@@ -18,14 +20,6 @@ mod portio;
 
 const PARPORT0_BASE: u16 = 0x378;
 const PARPORT0_IRQ: u8 = 7;
-
-extern "C" {
-    fn spin_lock_irq(lock: *mut nk_bindings::spinlock_t) -> u8;
-    fn spin_unlock_irq(lock: *mut nk_bindings::spinlock_t, flags: u8);
-    fn io_delay();
-    fn inb(data: u16) -> u8;
-    fn outb(val: u8, port: u16);
-}
 
 bitfield! {
     pub struct StatReg(u8);
@@ -83,27 +77,24 @@ impl Parport {
         })
     }
 
-    fn lock(&mut self) {
-        let lock_ptr = &mut self.spinlock;
-        self.state_flags = unsafe { spin_lock_irq(lock_ptr) };
-    }
+    //fn lock(&mut self) {
+    //    let lock_ptr = &mut self.spinlock;
+    //    self.state_flags = unsafe { spin_lock_irq(lock_ptr) };
+    //}
 
-    fn unlock(&mut self) {
-        let lock_ptr = &mut self.spinlock;
-        unsafe { spin_unlock_irq(lock_ptr, self.state_flags) };
-    }
+    //fn unlock(&mut self) {
+    //    let lock_ptr = &mut self.spinlock;
+    //    unsafe { spin_unlock_irq(lock_ptr, self.state_flags) };
+    //}
 
     fn wait_for_attached_device(&mut self) {
-        let mut stat = StatReg(0);
-        let mut count = 0;
+        //let mut count = 0;
         loop {
-            unsafe {
-                io_delay();
-                stat.0 = inb(self.port.stat_port);
-                count += 1;
-                if stat.busy() {
-                    break;
-                }
+            io_delay();
+            let stat = self.port.read_stat();
+            //count += 1;
+            if stat.busy() {
+                break;
             }
         }
     }
