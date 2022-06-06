@@ -137,6 +137,15 @@ impl Parport {
         unimplemented!()
     }
 
+    fn status(&self) -> i32 {
+        let rc = self.state;
+        if let ParportStatus::Busy = rc {
+            nk_bindings::NK_CHARDEV_READABLE as i32 | nk_bindings::NK_CHARDEV_WRITEABLE as i32
+        } else {
+            0
+        }
+    }
+
     fn get_name(&self) -> String {
         self.dev.as_ref().unwrap().get_name()
     }
