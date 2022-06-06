@@ -8,39 +8,16 @@ use core::{
     ptr::NonNull,
 };
 
-use alloc::string::String;
+use alloc::{string::String, sync::Arc};
 
 use crate::utils::print_to_vc;
 use crate::{nk_bindings, utils::to_c_string};
 
-use super::{Parport, StatReg};
+use super::{lock::IRQLock, Parport, StatReg};
 
 pub struct NkCharDev {
     dev: NonNull<nk_bindings::nk_char_dev>,
-}
-
-// does this function need to be `unsafe`?
-pub unsafe fn nk_char_dev_register(
-    name: &str,
-    parport: &mut Parport,
-) -> Result<NonNull<nk_bindings::nk_char_dev>, Error> {
-    print_to_vc("register device\n");
-
-    let name_bytes = to_c_string(name);
-    let parport_ptr = parport as *const Parport;
-    let cd = &CHARDEV_INTERFACE as *const nk_bindings::nk_char_dev_int;
-    let r;
-    unsafe {
-        r = nk_bindings::nk_char_dev_register(
-            name_bytes,
-            0,
-            // not actually mutable, but C code had no `const` qualifier
-            cd as *mut nk_bindings::nk_char_dev_int,
-            // not actually mutable, but C code had no `const` qualifier
-            parport_ptr as *mut Parport as *mut c_void,
-        );
-    }
-    NonNull::new(r).ok_or(Error)
+    parport: Arc<IRQLock<Parport>>,
 }
 
 impl NkCharDev {
@@ -52,25 +29,50 @@ impl NkCharDev {
         String::from_utf8_lossy(s).into_owned()
     }
 
-    pub fn new(dev: NonNull<nk_bindings::nk_char_dev>) -> Result<Self, Error> {
-        Ok(NkCharDev { dev: dev })
+    pub fn new(name: &str, parport: Arc<IRQLock<Parport>>) -> Result<Self, Error> {
+        let mut d = Self {
+            dev: NonNull::dangling(),
+            parport,
+        };
+        d.nk_char_dev_register(name)?;
+        Ok(d)
+    }
+
+    fn nk_char_dev_register(&mut self, name: &str) -> Result<(), Error> {
+        print_to_vc("register device\n");
+
+        let name_bytes = to_c_string(name);
+        let parport_ptr = Arc::into_raw(self.parport.clone());
+        let cd = &CHARDEV_INTERFACE as *const nk_bindings::nk_char_dev_int;
+        let r;
+        unsafe {
+            r = nk_bindings::nk_char_dev_register(
+                name_bytes,
+                0,
+                // not actually mutable, but C code had no `const` qualifier
+                cd as *mut nk_bindings::nk_char_dev_int,
+                // not actually mutable, but C code had no `const` qualifier
+                parport_ptr as *mut Parport as *mut c_void,
+            );
+        }
+        self.dev = NonNull::new(r).ok_or(Error)?;
+        Ok(())
     }
 }
 
 impl Drop for NkCharDev {
     fn drop(&mut self) {
-        let ptr = unsafe { self.dev.as_mut() } as *mut nk_bindings::nk_char_dev;
         unsafe {
+            let ptr = self.dev.as_mut() as *mut nk_bindings::nk_char_dev;
             nk_bindings::nk_char_dev_unregister(ptr);
         }
     }
 }
 
 pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
-    let p = state as *mut Parport;
-    // TODO: fix this mess
-    let p: &Parport = unsafe { p.as_ref() }.unwrap();
-    if p.is_ready() {
+    // caller must guarantee `state`, and the object it points to, was not mutated
+    let p = unsafe { Arc::from_raw(state as *const IRQLock<Parport>) };
+    if p.lock().is_ready() {
         CHARDEV_RW
     } else {
         0
@@ -84,11 +86,11 @@ pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
 
 pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
     print_to_vc("write!\n");
-    let p = state as *mut Parport;
-    // TODO: fix this mess
-    let p: &mut Parport = unsafe { p.as_mut() }.unwrap();
+    // caller must guarantee `state`, and the object it points to, was not mutated
+    let p = unsafe { Arc::from_raw(state as *const IRQLock<Parport>) };
+    // caller guarantees `src` points to the correct byte to write
     let byte = unsafe { *src };
-    if p.write(byte).is_ok() {
+    if p.lock().write(byte).is_ok() {
         1 // success
     } else {
         0 // failure
