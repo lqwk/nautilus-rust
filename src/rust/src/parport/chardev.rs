@@ -52,7 +52,7 @@ impl NkCharDev {
                 // not actually mutable, but C code had no `const` qualifier
                 cd as *mut nk_bindings::nk_char_dev_int,
                 // not actually mutable, but C code had no `const` qualifier
-                parport_ptr as *mut Parport as *mut c_void,
+                parport_ptr as *mut c_void,
             );
         }
         self.dev = NonNull::new(r).ok_or(Error)?;
