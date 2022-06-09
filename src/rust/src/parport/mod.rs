@@ -1,15 +1,15 @@
 use core::ffi::c_int;
 use core::fmt::Error;
 
-use alloc::string::String;
+use alloc::{string::String, sync::Arc};
 use bitfield::bitfield;
 
-use crate::{nk_bindings, utils::print_to_vc};
+use crate::utils::print_to_vc;
 use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
 
-use self::portio::io_delay;
+use self::{lock::IRQLock, portio::io_delay};
 
 pub mod nk_shell_cmd;
 
@@ -54,38 +54,30 @@ enum ParportStatus {
 }
 
 pub struct Parport {
-    dev: Option<NkCharDev>,
+    dev: NkCharDev,
     port: ParportIO,
     irq: Irq,
     state: ParportStatus,
-    spinlock: nk_bindings::spinlock_t,
-    state_flags: u8,
 }
 
-//unsafe impl Sync for Parport {}
-//unsafe impl Send for Parport {}
-
 impl Parport {
-    pub fn new(port: ParportIO, irq: Irq, name: &str) -> Result<Self, Error> {
-        Ok(Parport {
-            dev: None,
-            port: port,
-            irq: irq,
+    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq) -> Result<Arc<IRQLock<Parport>>, Error> {
+        let p = Parport {
+            dev,
+            port,
+            irq,
             state: ParportStatus::Ready,
-            spinlock: 0,
-            state_flags: 0,
-        })
+        };
+
+        let shared_p = Arc::new(IRQLock::new(p));
+
+        unsafe {
+            shared_p.lock().irq.register(shared_p.clone())?;
+        }
+        shared_p.lock().dev.register(shared_p.clone())?;
+
+        Ok(shared_p)
     }
-
-    //fn lock(&mut self) {
-    //    let lock_ptr = &mut self.spinlock;
-    //    self.state_flags = unsafe { spin_lock_irq(lock_ptr) };
-    //}
-
-    //fn unlock(&mut self) {
-    //    let lock_ptr = &mut self.spinlock;
-    //    unsafe { spin_unlock_irq(lock_ptr, self.state_flags) };
-    //}
 
     fn wait_for_attached_device(&mut self) {
         //let mut count = 0;
@@ -111,6 +103,8 @@ impl Parport {
         stat.set_busy(false); // stat.busy = 0
         self.port.write_stat(&stat);
 
+        self.wait_for_attached_device();
+
         // set device to output mode
         print_to_vc("setting device to output mode\n");
         let mut ctrl = self.port.read_ctrl();
@@ -133,39 +127,62 @@ impl Parport {
         Ok(())
     }
 
-    fn read(&mut self) -> u8 {
-        unimplemented!()
-    }
-
-    fn status(&self) -> i32 {
-        let rc = self.state;
-        if let ParportStatus::Busy = rc {
-            nk_bindings::NK_CHARDEV_READABLE as i32 | nk_bindings::NK_CHARDEV_WRITEABLE as i32
-        } else {
-            0
+    fn read(&mut self) -> Result<u8, Error> {
+        if !self.is_ready() {
+            return Err(Error);
         }
+        self.state = ParportStatus::Busy;
+
+        // mark device as busy
+        print_to_vc("setting device as busy\n");
+        let mut stat = self.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        self.port.write_stat(&stat);
+
+        self.wait_for_attached_device();
+
+        // disable output drivers for reading so no fire happens
+        let mut ctrl = self.port.read_ctrl();
+        ctrl.set_bidir_en(true); // active low to enable output
+        self.port.write_ctrl(&ctrl);
+
+        Ok(self.port.read_data().data)
     }
 
     fn get_name(&self) -> String {
-        self.dev.as_ref().unwrap().get_name()
+        self.dev.get_name()
     }
 
     fn is_ready(&self) -> bool {
         self.state == ParportStatus::Ready
     }
+
+    fn set_ready(&mut self) {
+        self.state = ParportStatus::Ready;
+
+        let mut stat = self.port.read_stat();
+        stat.set_busy(true);
+        self.port.write_stat(&stat);
+
+        self.dev.signal();
+    }
+}
+
+unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result<(), Error> {
+    let port = unsafe { ParportIO::new(port) };
+    let irq = Irq::new(irq.into());
+    let dev = NkCharDev::new(name);
+    let parport = Parport::new(dev, port, irq)?;
+    print_to_vc(&parport.lock().get_name());
+
+    Ok(())
 }
 
 fn discover_and_bringup_devices() -> Result<(), Error> {
-    let name = "parport0";
-
-    let port = unsafe { ParportIO::new(PARPORT0_BASE) };
-    let irq = unsafe { Irq::new(PARPORT0_IRQ.into()) };
-
-    Parport::new(port, irq, name)?;
-
-    //let r = nk_char_dev_register(name, &mut parport).unwrap();
-
-    // parport.dev =
+    unsafe {
+        // PARPORT0_BASE and PARPORT0_IRQ are valid and correct
+        bringup_device("parport0", PARPORT0_BASE, PARPORT0_IRQ)?;
+    }
 
     Ok(())
 }

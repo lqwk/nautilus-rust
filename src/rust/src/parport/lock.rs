@@ -8,7 +8,7 @@ extern "C" {
 }
 
 pub type IRQLock<T> = lock_api::Mutex<NkIrqLock, T>;
-pub type IRQLockGuard<'a, T> = lock_api::MutexGuard<'a, NkIrqLock, T>;
+//pub type IRQLockGuard<'a, T> = lock_api::MutexGuard<'a, NkIrqLock, T>;
 
 pub struct NkIrqLock {
     spinlock: UnsafeCell<nk_bindings::spinlock_t>,
