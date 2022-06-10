@@ -1,6 +1,7 @@
 use core::{
     ffi::{c_int, c_void},
     fmt::Error,
+    ptr::null,
 };
 
 use alloc::sync::Arc;
@@ -10,35 +11,68 @@ use crate::nk_bindings;
 use super::{lock::IRQLock, Parport};
 
 pub struct Irq {
-    num: u16,
+    num: u8,
+    registered: bool,
+    arc_ptr: *const IRQLock<Parport>,
 }
 
 impl Irq {
-    pub fn new(num: u16) -> Self {
-        Irq { num }
+    pub fn new(num: u8) -> Self {
+        Irq {
+            num,
+            registered: false,
+            arc_ptr: null(),
+        }
     }
 
     pub unsafe fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result<(), Error> {
+        if self.registered {
+            return Err(Error);
+        }
+
         let handler = interrupt_handler;
-        let parport_ptr = Arc::into_raw(parport);
+        self.arc_ptr = Arc::into_raw(parport);
         let result;
         unsafe {
             result = nk_bindings::register_irq_handler(
-                self.num,
+                self.num.into(),
                 Some(handler),
-                parport_ptr as *mut c_void,
+                self.arc_ptr as *mut c_void,
             );
         }
-        match result {
-            0 => Ok(()),
-            _ => Err(Error),
+
+        if result == 0 {
+            unsafe {
+                nk_bindings::nk_unmask_irq(self.num);
+            }
+            self.registered = true;
+            Ok(())
+        } else {
+            // taking back `Arc` is safe if handler registration never succeeded
+            let _ = unsafe { Arc::from_raw(self.arc_ptr) };
+            Err(Error)
         }
     }
 }
 
-unsafe fn deref_locked_state(state: *mut c_void) -> Arc<IRQLock<Parport>> {
+impl Drop for Irq {
+    fn drop(&mut self) {
+        if self.registered {
+            unsafe {
+                nk_bindings::nk_mask_irq(self.num);
+                Arc::from_raw(self.arc_ptr);
+            }
+        }
+    }
+}
+
+unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
     // caller must guarantee `state`, and the object it points to, was not mutated
-    unsafe { Arc::from_raw(state as *const IRQLock<Parport>) }
+    //
+    // caller must not drop the strong reference count of the containing `Arc` to 0 while
+    // the returned reference exists
+    let l = state as *const IRQLock<Parport>;
+    unsafe { l.as_ref() }.unwrap()
 }
 
 pub unsafe extern "C" fn interrupt_handler(

@@ -75,15 +75,21 @@ impl Drop for NkCharDev {
     fn drop(&mut self) {
         if let Some(ptr) = unsafe { self.dev.as_mut() } {
             unsafe {
+                // taking back `Arc` is safe from any non-null `chardev` we registered
+                let _ = Arc::from_raw(ptr.dev.state as *const IRQLock<Parport>);
                 nk_bindings::nk_char_dev_unregister(ptr);
             }
         }
     }
 }
 
-unsafe fn deref_locked_state(state: *mut c_void) -> Arc<IRQLock<Parport>> {
+unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
     // caller must guarantee `state`, and the object it points to, was not mutated
-    unsafe { Arc::from_raw(state as *const IRQLock<Parport>) }
+    //
+    // caller must not drop the strong reference count of the containing `Arc` to 0 while
+    // the returned reference exists
+    let l = state as *const IRQLock<Parport>;
+    unsafe { l.as_ref() }.unwrap()
 }
 
 pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
