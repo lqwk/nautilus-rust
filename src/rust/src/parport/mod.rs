@@ -170,7 +170,7 @@ impl Parport {
 
 unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result<(), Error> {
     let port = unsafe { ParportIO::new(port) };
-    let irq = Irq::new(irq.into());
+    let irq = Irq::new(irq);
     let dev = NkCharDev::new(name);
     let parport = Parport::new(dev, port, irq)?;
     print_to_vc(&parport.lock().get_name());
