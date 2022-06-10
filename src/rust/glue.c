@@ -1,7 +1,7 @@
+#include <nautilus/cpu.h>
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
 #include <nautilus/spinlock.h>
-#include <nautilus/cpu.h>
 
 // Rust function we will call from C
 extern int example_shell_entry(char *, void *);
@@ -19,10 +19,8 @@ nk_register_shell_cmd(rust_example_impl);
 // parport
 
 // direct wrappers around inline functions
-static uint8_t spin_lock_irq(spinlock_t *lock) {
-  return spin_lock_irq_save(lock);
-}
-static void spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
+uint8_t spin_lock_irq(spinlock_t *lock) { return spin_lock_irq_save(lock); }
+void spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
   spin_unlock_irq_restore(lock, flags);
 }
 
