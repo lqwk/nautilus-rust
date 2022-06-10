@@ -71,12 +71,24 @@ impl Parport {
 
         let shared_p = Arc::new(IRQLock::new(p));
 
-        unsafe {
-            shared_p.lock().irq.register(shared_p.clone())?;
+        {
+            let mut locked_p = shared_p.lock();
+            unsafe {
+                locked_p.irq.register(shared_p.clone())?;
+            }
+            locked_p.dev.register(shared_p.clone())?;
+            locked_p.init();
         }
-        shared_p.lock().dev.register(shared_p.clone())?;
 
         Ok(shared_p)
+    }
+
+    fn init(&mut self) {
+        let mut ctrl = CtrlReg(0); // bidir = 0, which means we are in output mode
+        ctrl.set_select(true); // attached device selected
+        ctrl.set_init(true); // active low => 1 means we are not initializing it
+        ctrl.set_irq_en(true); // interrupt if we get an ack on the line
+        self.port.write_ctrl(&ctrl);
     }
 
     fn wait_for_attached_device(&mut self) {
