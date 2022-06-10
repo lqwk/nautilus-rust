@@ -153,7 +153,7 @@ impl Parport {
         self.dev.get_name()
     }
 
-    fn is_ready(&self) -> bool {
+    fn is_ready(&mut self) -> bool {
         self.state == ParportStatus::Ready
     }
 
