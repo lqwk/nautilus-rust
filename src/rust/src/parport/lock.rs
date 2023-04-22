@@ -1,17 +1,17 @@
-use crate::nk_bindings;
+use crate::kernel::bindings;
 use core::cell::UnsafeCell;
 use lock_api::{GuardSend, RawMutex};
 
 extern "C" {
-    fn spin_lock_irq(lock: *mut nk_bindings::spinlock_t) -> u8;
-    fn spin_unlock_irq(lock: *mut nk_bindings::spinlock_t, flags: u8);
+    fn spin_lock_irq(lock: *mut bindings::spinlock_t) -> u8;
+    fn spin_unlock_irq(lock: *mut bindings::spinlock_t, flags: u8);
 }
 
 pub type IRQLock<T> = lock_api::Mutex<NkIrqLock, T>;
 //pub type IRQLockGuard<'a, T> = lock_api::MutexGuard<'a, NkIrqLock, T>;
 
 pub struct NkIrqLock {
-    spinlock: UnsafeCell<nk_bindings::spinlock_t>,
+    spinlock: UnsafeCell<bindings::spinlock_t>,
     state_flags: UnsafeCell<u8>,
 }
 

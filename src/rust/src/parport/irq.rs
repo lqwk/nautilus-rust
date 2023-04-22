@@ -6,7 +6,7 @@ use core::{
 
 use alloc::sync::Arc;
 
-use crate::nk_bindings;
+use crate::kernel::bindings;
 
 use super::{lock::IRQLock, Parport};
 
@@ -34,7 +34,7 @@ impl Irq {
         self.arc_ptr = Arc::into_raw(parport);
         let result;
         unsafe {
-            result = nk_bindings::register_irq_handler(
+            result = bindings::register_irq_handler(
                 self.num.into(),
                 Some(handler),
                 self.arc_ptr as *mut c_void,
@@ -43,7 +43,7 @@ impl Irq {
 
         if result == 0 {
             unsafe {
-                nk_bindings::nk_unmask_irq(self.num);
+                bindings::nk_unmask_irq(self.num);
             }
             self.registered = true;
             Ok(())
@@ -59,7 +59,7 @@ impl Drop for Irq {
     fn drop(&mut self) {
         if self.registered {
             unsafe {
-                nk_bindings::nk_mask_irq(self.num);
+                bindings::nk_mask_irq(self.num);
                 Arc::from_raw(self.arc_ptr);
             }
         }
@@ -76,8 +76,8 @@ unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
 }
 
 pub unsafe extern "C" fn interrupt_handler(
-    _excp: *mut nk_bindings::excp_entry_t,
-    _vec: nk_bindings::excp_vec_t,
+    _excp: *mut bindings::excp_entry_t,
+    _vec: bindings::excp_vec_t,
     state: *mut c_void,
 ) -> c_int {
     let p = unsafe { deref_locked_state(state) };
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn interrupt_handler(
 
     // IRQ_HANDLER_END
     unsafe {
-        nk_bindings::apic_do_eoi();
+        bindings::apic_do_eoi();
     }
     0
     // l falls out of scope here, releasing the lock and reenabling interrupts after

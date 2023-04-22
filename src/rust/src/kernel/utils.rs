@@ -1,6 +1,6 @@
 use alloc::ffi::CString;
 
-use crate::nk_bindings;
+use crate::kernel::bindings;
 
 /// Takes a `&str` and provides a C-flavored string that can be passed via FFI.
 /// Unless followed by a call to `CString::from_raw` on the returned pointer,
@@ -15,7 +15,7 @@ pub fn print_to_vc(s: &str) {
     unsafe {
         // c_str is safe to pass to nk_vc_printf;
         // it is a nul-terminated C string.
-        nk_bindings::nk_vc_printf(c_str);
+        bindings::nk_vc_printf(c_str);
         // nk_vc_printf obeys the invariant required for `from_raw`
         // (it does not mutate or free the string).
         // We are free to "take back" the memory associated with the string.

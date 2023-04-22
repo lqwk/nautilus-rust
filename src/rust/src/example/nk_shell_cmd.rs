@@ -1,5 +1,5 @@
 use core::ffi::{c_char, c_int, c_void};
-use crate::utils::print_to_vc;
+use crate::kernel::utils::print_to_vc;
 use super::nk_rust_example;
 
 // this handler function can be called from the shell after registering it

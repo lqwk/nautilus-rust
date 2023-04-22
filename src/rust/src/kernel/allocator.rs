@@ -3,7 +3,7 @@ use core::{
     ffi::c_void,
 };
 
-use crate::nk_bindings;
+use crate::kernel::bindings;
 
 pub struct NkAllocator;
 
@@ -11,7 +11,7 @@ unsafe impl GlobalAlloc for NkAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let malloc_size = layout.pad_to_align().size() as u64;
         // TODO: is kmem_malloc thread-safe?? `NkAllocator` does NOT lock
-        let allocated = unsafe { nk_bindings::kmem_malloc(malloc_size) } as *mut u8;
+        let allocated = unsafe { bindings::kmem_malloc(malloc_size) } as *mut u8;
         if allocated as usize % layout.align() != 0 {
             // the current allocator is a buddy allocator,
             // which guarantees this shouldn't happen.
@@ -22,7 +22,7 @@ unsafe impl GlobalAlloc for NkAllocator {
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         unsafe {
-            nk_bindings::kmem_free(ptr as *mut c_void);
+            bindings::kmem_free(ptr as *mut c_void);
         }
     }
 }

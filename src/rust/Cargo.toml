@@ -1,6 +1,5 @@
-
 [package]
-name = "nk_rust" # this is for core-kernel
+name = "nk_rust"
 version = "0.0.0"
 edition = "2021"
 authors = [
@@ -12,12 +11,6 @@ authors = [
 
 [lib]
 crate-type = ["staticlib"]
-
-[profile.dev]
-panic = "abort" # no stack unwind on rust panic
-
-[profile.release]
-panic = "abort" # no stack unwind on rust panic
 
 [build-dependencies]
 bindgen = "0.59.2"

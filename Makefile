@@ -430,10 +430,7 @@ endif
 # NOTE: We MUST have max-page-size set to this here. Otherwise things
 # go off the rails for the Grub multiboot setup because the linker
 # does strange things...
-
-# FIXME: --allow-multiple-definition is a highly unstable hack to
-# correct linkage issues with Rust.
-LDFLAGS         := -z max-page-size=0x1000 --allow-multiple-definition
+LDFLAGS         := -z max-page-size=0x1000
 AFLAGS		:= 
 
 # Read KERNELRELEASE from .kernelrelease (if it exists)

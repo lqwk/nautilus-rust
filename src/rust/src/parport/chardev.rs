@@ -1,5 +1,5 @@
 const CHARDEV_RW: c_int =
-    (nk_bindings::NK_CHARDEV_READABLE | nk_bindings::NK_CHARDEV_WRITEABLE) as c_int;
+    (bindings::NK_CHARDEV_READABLE | bindings::NK_CHARDEV_WRITEABLE) as c_int;
 
 use core::{
     ffi::{c_int, c_void},
@@ -10,13 +10,13 @@ use core::{
 
 use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
-use crate::utils::print_to_vc;
-use crate::{nk_bindings, utils::to_c_string};
+use crate::kernel::utils::{print_to_vc, to_c_string};
+use crate::kernel::bindings;
 
 use super::{lock::IRQLock, Parport};
 
 pub struct NkCharDev {
-    dev: *mut nk_bindings::nk_char_dev,
+    dev: *mut bindings::nk_char_dev,
     name: String,
 }
 
@@ -37,9 +37,9 @@ impl NkCharDev {
             panic!("not registered");
         }
 
-        let d = self.dev as *mut nk_bindings::nk_dev;
+        let d = self.dev as *mut bindings::nk_dev;
         unsafe {
-            nk_bindings::nk_dev_signal(d);
+            bindings::nk_dev_signal(d);
         }
     }
 
@@ -53,14 +53,14 @@ impl NkCharDev {
         // TODO: fix leak of this C string on unregistration
         let name_bytes = to_c_string(&self.name);
         let parport_ptr = Arc::into_raw(parport);
-        let cd = &CHARDEV_INTERFACE as *const nk_bindings::nk_char_dev_int;
+        let cd = &CHARDEV_INTERFACE as *const bindings::nk_char_dev_int;
         let r;
         unsafe {
-            r = nk_bindings::nk_char_dev_register(
+            r = bindings::nk_char_dev_register(
                 name_bytes,
                 0,
                 // not actually mutable, but C code had no `const` qualifier
-                cd as *mut nk_bindings::nk_char_dev_int,
+                cd as *mut bindings::nk_char_dev_int,
                 // not actually mutable, but C code had no `const` qualifier
                 parport_ptr as *mut c_void,
             );
@@ -77,7 +77,7 @@ impl Drop for NkCharDev {
             unsafe {
                 // taking back `Arc` is safe from any non-null `chardev` we registered
                 let _ = Arc::from_raw(ptr.dev.state as *const IRQLock<Parport>);
-                nk_bindings::nk_char_dev_unregister(ptr);
+                bindings::nk_char_dev_unregister(ptr);
             }
         }
     }
@@ -133,7 +133,7 @@ pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
 
 pub unsafe extern "C" fn get_characteristics(
     _state: *mut c_void,
-    c: *mut nk_bindings::nk_char_dev_characteristics,
+    c: *mut bindings::nk_char_dev_characteristics,
 ) -> c_int {
     unsafe {
         // memset the (single) struct to bytes of 0
@@ -142,12 +142,12 @@ pub unsafe extern "C" fn get_characteristics(
     0
 }
 
-const CHARDEV_INTERFACE: nk_bindings::nk_char_dev_int = nk_bindings::nk_char_dev_int {
+const CHARDEV_INTERFACE: bindings::nk_char_dev_int = bindings::nk_char_dev_int {
     get_characteristics: Some(get_characteristics),
     read: Some(read),
     write: Some(write),
     status: Some(status),
-    dev_int: nk_bindings::nk_dev_int {
+    dev_int: bindings::nk_dev_int {
         open: None,
         close: None,
     },

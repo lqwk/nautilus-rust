@@ -1,11 +1,15 @@
+extern crate alloc;
+
 use core::cmp::min;
 use core::panic::PanicInfo;
 
-use crate::nk_bindings;
+pub mod bindings;
+pub mod allocator;
+pub mod utils;
 
-#[cfg(not(test))]
+// #[cfg(not(test))]
 #[panic_handler]
-pub fn nk_rust_panic(info: &PanicInfo) -> ! {
+pub fn panic(info: &PanicInfo) -> ! {
     let panic_msg = match info.message() {
         Some(m) => match m.as_str() {
             Some(s) if !s.contains('\0') => m
@@ -36,7 +40,7 @@ pub fn nk_rust_panic(info: &PanicInfo) -> ! {
     unsafe {
         // this is fine because this function never returns;
         // it might not be okay otherwise
-        nk_bindings::panic(buf_ptr);
+        bindings::panic(buf_ptr);
     }
 
     // should never get here - NK's panic handler should diverge
