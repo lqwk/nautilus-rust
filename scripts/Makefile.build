@@ -192,17 +192,17 @@ endef
 
 # Built-in and composite module parts
 
-%.o: %.c FORCE
+%.o: %.c
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)
 
-%.o: %.cc FORCE
+%.o: %.cc
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cxx_o_cc)
 
 # Single-part modules are special since we need to mark them in $(MODVERDIR)
 
-$(single-used-m): %.o: %.c FORCE
+$(single-used-m): %.o: %.c
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)
 	@{ echo $(@:.o=.ko); echo $@; } > $(MODVERDIR)/$(@F:.o=.mod)
