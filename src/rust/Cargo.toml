@@ -13,9 +13,9 @@ authors = [
 crate-type = ["staticlib"]
 
 [build-dependencies]
-bindgen = "0.59.2"
+bindgen = "0.65.1"
 
 [dependencies]
-bitfield = "0.13.2"
-x86_64 = "0.14.9"
-lock_api = "0.4.7"
+bitfield = "0.14.0"
+x86_64 = "0.14.10"
+lock_api = "0.4.9"

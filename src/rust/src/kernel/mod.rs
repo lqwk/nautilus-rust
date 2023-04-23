@@ -42,7 +42,4 @@ pub fn panic(info: &PanicInfo) -> ! {
         // it might not be okay otherwise
         bindings::panic(buf_ptr);
     }
-
-    // should never get here - NK's panic handler should diverge
-    loop {}
 }

@@ -9,7 +9,7 @@ pub struct NkAllocator;
 
 unsafe impl GlobalAlloc for NkAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let malloc_size = layout.pad_to_align().size() as u64;
+        let malloc_size = layout.pad_to_align().size();
         // TODO: is kmem_malloc thread-safe?? `NkAllocator` does NOT lock
         let allocated = unsafe { bindings::kmem_malloc(malloc_size) } as *mut u8;
         if allocated as usize % layout.align() != 0 {

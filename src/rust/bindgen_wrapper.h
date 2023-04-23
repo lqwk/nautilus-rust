@@ -6,13 +6,10 @@
 #define NAUT_CONFIG_X86_64_HOST
 #define __NAUTILUS__
 
-// TODO: perhaps rename the `main` function in
-// `include/arch/x64/main.h` because (annoyingly)
-// clang treats a wrongly-typed `main` as a hard error
-// (ie. forcing the signature to be `int main(int x, char** y)`)
 #define BINDGEN_ELIDE_MAIN
-#include "nautilus/acpi-x86_64.h"
+
 #include "nautilus/acpi.h"
+#include "nautilus/acpi-x86_64.h"
 #include "nautilus/aspace.h"
 #include "nautilus/atomic.h"
 #include "nautilus/backtrace.h"
@@ -26,8 +23,8 @@
 #include "nautilus/cmdline.h"
 #include "nautilus/condvar.h"
 #include "nautilus/cpu.h"
-#include "nautilus/cpu_state.h"
 #include "nautilus/cpuid.h"
+#include "nautilus/cpu_state.h"
 #include "nautilus/cxxglue.h"
 #include "nautilus/dev.h"
 #include "nautilus/doprnt.h"
@@ -73,10 +70,10 @@
 #include "nautilus/multiboot2.h"
 #include "nautilus/mwait.h"
 #include "nautilus/naut_assert.h"
+#include "nautilus/nautilus_exe.h"
+#include "nautilus/nautilus.h"
 #include "nautilus/naut_string.h"
 #include "nautilus/naut_types.h"
-#include "nautilus/nautilus.h"
-#include "nautilus/nautilus_exe.h"
 #include "nautilus/nemo.h"
 #include "nautilus/netdev.h"
 #include "nautilus/numa.h"

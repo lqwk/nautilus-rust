@@ -9,7 +9,7 @@ set -euo pipefail
 OUTF=bindgen_wrapper.h
 
 echo -n > $OUTF
-for f in ../../../include/nautilus/*.h; do
+for f in ../../include/nautilus/*.h; do
   name=$(basename $f)
   echo "#include \"nautilus/$name\"" >> $OUTF
 done
