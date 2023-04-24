@@ -5,6 +5,7 @@ use core::panic::PanicInfo;
 
 pub mod bindings;
 pub mod allocator;
+pub mod shell;
 pub mod utils;
 
 // #[cfg(not(test))]

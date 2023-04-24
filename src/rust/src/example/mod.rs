@@ -1,8 +1,7 @@
-pub mod nk_shell_cmd;
+use crate::kernel::{shell::*, utils::print_to_vc};
 use alloc::{string::ToString, vec::Vec};
-use crate::kernel::utils::print_to_vc;
 
-pub fn nk_rust_example(a: i32, b: i32) -> i32 {
+fn example(a: i32, b: i32) -> i32 {
     let test_s = "Hello, this is the Rust example module!\n";
     print_to_vc(test_s);
 
@@ -20,3 +19,9 @@ pub fn nk_rust_example(a: i32, b: i32) -> i32 {
 
     a + b
 }
+
+register_shell_command!("rust", "rust", |_, _| {
+    let s = "now entered Rust code\n";
+    print_to_vc(s);
+    example(8, 1);
+});

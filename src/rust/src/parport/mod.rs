@@ -4,14 +4,12 @@ use core::fmt::Error;
 use alloc::{string::String, sync::Arc};
 use bitfield::bitfield;
 
-use crate::kernel::utils::print_to_vc;
+use crate::kernel::{utils::print_to_vc, shell::*};
 use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
 
 use self::{lock::IRQLock, portio::io_delay};
-
-pub mod nk_shell_cmd;
 
 mod chardev;
 mod irq;
@@ -208,3 +206,7 @@ pub extern "C" fn nk_parport_init() -> c_int {
         0
     }
 }
+
+register_shell_command!("parport", "parport", |_, _| {
+    nk_parport_init();
+});
