@@ -1,10 +1,4 @@
-// TODO: is there a better way to ensure a macro is imported along
-// with is `use` dependencies?
-pub use crate::kernel::bindings;
-pub use core::ffi::c_void;
-pub use paste::paste;
-
-/// Register a shell command 
+/// Register a shell command
 ///
 /// # Arguments
 ///
@@ -18,7 +12,7 @@ pub use paste::paste;
 /// # Examples
 ///
 /// ```
-/// use crate::kernel::{shell::*, utils::print_to_vc};
+/// use crate::kernel::{shell::register_shell_command, utils::print_to_vc};
 ///
 /// register_shell_command!("sayhello", "sayhello", |_, _| {
 ///     print_to_vc("hello");
@@ -28,8 +22,8 @@ macro_rules! register_shell_command {
     ($cmd:expr, $help:expr, $handler:expr) => {
         // Rust macros can't create new identifiers programatically as easily
         // as C can. We use paste to do this.
-        paste! {
-            extern "C" fn [<handle_ $cmd>](buf: *mut i8, priv_: *mut c_void) -> i32 {
+        paste::paste! {
+            extern "C" fn [<handle_ $cmd>](buf: *mut i8, priv_: *mut core::ffi::c_void) -> i32 {
                 $handler(buf, priv_);
                 0
             }
@@ -38,10 +32,11 @@ macro_rules! register_shell_command {
             // the ".shell_cmds" section of the binary.
             #[no_mangle]
             #[link_section = ".shell_cmds"]
-            static mut [<_nk_cmd_ $cmd>]: *const bindings::shell_cmd_impl = &bindings::shell_cmd_impl {
-                cmd: concat!($cmd, "\0").as_ptr() as *mut i8,
-                help_str: concat!($help, "\0").as_ptr() as *mut i8,
-                handler: Some([<handle_ $cmd>]),
+            static mut [<_nk_cmd_ $cmd>]:
+                *const $crate::kernel::bindings::shell_cmd_impl = &$crate::kernel::bindings::shell_cmd_impl {
+                    cmd: concat!($cmd, "\0").as_ptr() as *mut i8,
+                    help_str: concat!($help, "\0").as_ptr() as *mut i8,
+                    handler: Some([<handle_ $cmd>]),
             } as *const _ ;
         }
     };

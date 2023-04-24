@@ -1,4 +1,4 @@
-use crate::kernel::{shell::*, utils::print_to_vc};
+use crate::kernel::{shell::register_shell_command, utils::print_to_vc};
 use alloc::{string::ToString, vec::Vec};
 
 fn example(a: i32, b: i32) -> i32 {

@@ -4,7 +4,7 @@ use core::fmt::Error;
 use alloc::{string::String, sync::Arc};
 use bitfield::bitfield;
 
-use crate::kernel::{utils::print_to_vc, shell::*};
+use crate::kernel::{utils::print_to_vc, shell::register_shell_command};
 use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
