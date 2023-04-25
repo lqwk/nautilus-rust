@@ -1,27 +1,24 @@
-use crate::kernel::{shell::register_shell_command, utils::print_to_vc};
-use alloc::{string::ToString, vec::Vec};
+use crate::kernel::shell::register_shell_command;
+use alloc::vec::Vec;
+
+use crate::kernel::print::vc_println;
 
 fn example(a: i32, b: i32) -> i32 {
-    let test_s = "Hello, this is the Rust example module!\n";
-    print_to_vc(test_s);
-
-    let sum = (a + b).to_string();
-    let sum_str = sum.as_str();
-    print_to_vc(sum_str);
-    print_to_vc("\n");
+    vc_println!("Hello, this is the Rust example module!");
+    vc_println!("{} + {} = {}", a, b, a + b);
 
     let mut vec = Vec::new();
     for i in 0..a {
+        vc_println!("Pushing: {}", i);
         vec.push(i);
-        print_to_vc(i.to_string().as_str());
-        print_to_vc("\n");
     }
+
+    vc_println!("vec = {:?}", &vec);
 
     a + b
 }
 
 register_shell_command!("rust", "rust", |_, _| {
-    let s = "now entered Rust code\n";
-    print_to_vc(s);
+    vc_println!("Entered Rust code.");
     example(8, 1);
 });

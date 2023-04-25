@@ -10,8 +10,8 @@ use core::{
 
 use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
-use crate::kernel::utils::{print_to_vc, to_c_string};
-use crate::kernel::bindings;
+use crate::kernel::utils::to_c_string;
+use crate::kernel::{bindings, print::vc_println};
 
 use super::{lock::IRQLock, Parport};
 
@@ -44,7 +44,7 @@ impl NkCharDev {
     }
 
     pub fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result<(), Error> {
-        print_to_vc("register device\n");
+        vc_println!("register device");
 
         if !self.dev.is_null() {
             panic!("attempted to register NkCharDev twice");
@@ -102,7 +102,7 @@ pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
 }
 
 pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
-    print_to_vc("read!\n");
+    vc_println!("read!");
 
     let s = unsafe { deref_locked_state(state) };
     let mut p = s.lock();
@@ -119,7 +119,7 @@ pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
 }
 
 pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
-    print_to_vc("write!\n");
+    vc_println!("write!");
 
     let s = unsafe { deref_locked_state(state) };
     let mut p = s.lock();

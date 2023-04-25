@@ -4,7 +4,7 @@ use core::fmt::Error;
 use alloc::{string::String, sync::Arc};
 use bitfield::bitfield;
 
-use crate::kernel::{utils::print_to_vc, shell::register_shell_command};
+use crate::kernel::{shell::register_shell_command, print::vc_println};
 use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
@@ -108,7 +108,7 @@ impl Parport {
         self.state = ParportStatus::Busy;
 
         // mark device as busy
-        print_to_vc("setting device as busy\n");
+        vc_println!("setting device as busy");
         let mut stat = self.port.read_stat();
         stat.set_busy(false); // stat.busy = 0
         self.port.write_stat(&stat);
@@ -116,17 +116,17 @@ impl Parport {
         self.wait_for_attached_device();
 
         // set device to output mode
-        print_to_vc("setting device to output mode\n");
+        vc_println!("setting device to output mode");
         let mut ctrl = self.port.read_ctrl();
         ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
         self.port.write_ctrl(&ctrl);
 
         // write data byte to data register
-        print_to_vc("writing data to device\n");
+        vc_println!("writing data to device");
         self.port.write_data(&DataReg { data });
 
         // strobe the attached printer
-        print_to_vc("strobing device\n");
+        vc_println!("strobing device");
         ctrl.set_strobe(false); // ctrl.strobe = 0
         self.port.write_ctrl(&ctrl);
         ctrl.set_strobe(true); // ctrl.strobe = 1
@@ -144,7 +144,7 @@ impl Parport {
         self.state = ParportStatus::Busy;
 
         // mark device as busy
-        print_to_vc("setting device as busy\n");
+        vc_println!("setting device as busy");
         let mut stat = self.port.read_stat();
         stat.set_busy(false); // stat.busy = 0
         self.port.write_stat(&stat);
@@ -183,7 +183,7 @@ unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result<(), Error> {
     let irq = Irq::new(irq);
     let dev = NkCharDev::new(name);
     let parport = Parport::new(dev, port, irq)?;
-    print_to_vc(&parport.lock().get_name());
+    vc_println!("{}", &parport.lock().get_name());
 
     Ok(())
 }
@@ -199,7 +199,7 @@ fn discover_and_bringup_devices() -> Result<(), Error> {
 
 #[no_mangle]
 pub extern "C" fn nk_parport_init() -> c_int {
-    print_to_vc("partport init\n");
+    vc_println!("partport init");
     if discover_and_bringup_devices().is_err() {
         -1
     } else {
