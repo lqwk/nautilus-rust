@@ -9,7 +9,7 @@ fn example(a: i32, b: i32) -> i32 {
 
     let mut vec = Vec::new();
     for i in 0..a {
-        vc_println!("Pushing: {}", i);
+        vc_println!("Pushing: {i}");
         vec.push(i);
     }
 

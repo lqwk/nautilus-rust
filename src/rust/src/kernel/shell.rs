@@ -12,10 +12,10 @@
 /// # Examples
 ///
 /// ```
-/// use crate::kernel::{shell::register_shell_command, utils::print_to_vc};
+/// use crate::kernel::{shell::register_shell_command, print::vc_println};
 ///
 /// register_shell_command!("sayhello", "sayhello", |_, _| {
-///     print_to_vc("hello");
+///     vc_println!("hello");
 /// });
 /// ```
 macro_rules! register_shell_command {
