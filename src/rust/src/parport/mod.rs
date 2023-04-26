@@ -1,10 +1,10 @@
 use core::ffi::c_int;
 use core::fmt::Error;
 
-use alloc::{string::String, sync::Arc};
 use bitfield::bitfield;
 
-use crate::kernel::{shell::register_shell_command, print::vc_println};
+use crate::prelude::*;
+
 use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;

@@ -18,6 +18,7 @@
 ///     vc_println!("hello");
 /// });
 /// ```
+#[macro_export]
 macro_rules! register_shell_command {
     ($cmd:expr, $help:expr, $handler:expr) => {
         // Rust macros can't create new identifiers programatically as easily
@@ -41,5 +42,3 @@ macro_rules! register_shell_command {
         }
     };
 }
-
-pub(crate) use register_shell_command;

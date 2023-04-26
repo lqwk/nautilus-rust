@@ -15,6 +15,7 @@
 
 extern crate alloc;
 
+mod prelude;
+mod kernel;
 mod example;
 mod parport;
-mod kernel;
