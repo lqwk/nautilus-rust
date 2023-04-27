@@ -4,10 +4,9 @@
 ///
 /// `cmd`     - A string literal for the name of the command in the shell
 /// `help`    - A string literal for the help message
-/// `handler` - The function to be run when the command is executed.
-///             `handler` takes two arguments: a *mut i8 buffer and
-///             a *mut c_void buffer. Consult the C code for more
-///             information.
+/// `handler` - The function to be run when the command is executed, taking
+/// two arguments: a *mut i8 buffer and a *mut c_void buffer. Consult the
+/// relevant C code for more information.
 ///
 /// # Examples
 ///
