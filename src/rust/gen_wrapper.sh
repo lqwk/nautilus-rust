@@ -9,7 +9,12 @@ set -euo pipefail
 OUTF=bindgen_wrapper.h
 
 echo -n > $OUTF
+for f in $(find ../../include/config/debug -name "*.h" -exec realpath --relative-to ../../include {} \;); do
+  echo "#include \"$f\"" >> $OUTF
+done
+
 for f in ../../include/nautilus/*.h; do
   name=$(basename $f)
   echo "#include \"nautilus/$name\"" >> $OUTF
 done
+

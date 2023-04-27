@@ -1053,6 +1053,13 @@ menu Debugging
       help
         Turn on debug prints for C++ initialization/support code
 
+    config DEBUG_RUST
+      bool "Debug Rust"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for Rust modules
+
     config DEBUG_THREADS
       bool "Debug Threads"
       depends on DEBUG_PRINTS

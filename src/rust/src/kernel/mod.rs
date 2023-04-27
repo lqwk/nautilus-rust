@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use core::panic::PanicInfo;
+use crate::vc_println;
 
 pub mod bindings;
 pub mod allocator;
@@ -10,7 +11,7 @@ pub mod utils;
 
 #[panic_handler]
 pub fn panic(info: &PanicInfo) -> ! {
-    print::vc_println!("{}", info);
+    vc_println!("{}", info);
     unsafe {
         // SAFETY: FFI call.
         //

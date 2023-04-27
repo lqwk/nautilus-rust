@@ -37,8 +37,8 @@ macro_rules! vc_print {
 /// Prints to the virtual console with an implicit newline.
 #[macro_export]
 macro_rules! vc_println {
-    () => ($crate::kernel::print::vc_print!("\n"));
-    ($($arg:tt)*) => ($crate::kernel::print::vc_print!("{}\n", format_args!($($arg)*)));
+    () => ($crate::vc_print!("\n"));
+    ($($arg:tt)*) => ($crate::vc_print!("{}\n", format_args!($($arg)*)));
 }
 
 #[doc(hidden)]
@@ -95,9 +95,11 @@ impl fmt::Write for _LogWriter {
 }
 
 #[doc(hidden)]
-pub fn _log(args: fmt::Arguments) {
+#[allow(unused_imports)]
+pub fn _log(_args: fmt::Arguments) {
     use core::fmt::Write;
-    _LogWriter.write_fmt(args).unwrap();
+    #[cfg_accessible(crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
+    _LogWriter.write_fmt(_args).unwrap();
 }
 
 /// Prints a debug message (truncated if excessively long).
@@ -111,14 +113,15 @@ macro_rules! debug_print {
 /// Prints a debug message (truncated if excessively long), with an implicit newline.
 #[macro_export]
 macro_rules! debug_println {
-    () => ($crate::kernel::print::debug_print!("\n"));
-    ($($arg:tt)*) => ($crate::kernel::print::debug_print!("{}\n", format_args!($($arg)*)));
+    () => ($crate::debug_print!("\n"));
+    ($($arg:tt)*) => ($crate::debug_print!("{}\n", format_args!($($arg)*)));
 }
 
 /// Prints an error message (truncated if excessively long).
 #[macro_export]
 macro_rules! error_print {
     ($($arg:tt)*) => {
+        #[cfg_accessible(crate::kernel::bindings::NAUT_CONFIG_DEBUG_PRINTS)]
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR: {}" , format_args!($($arg)*)))
     };
 }
@@ -126,13 +129,6 @@ macro_rules! error_print {
 /// Prints an error message (truncated if excessively long), with an implicit newline.
 #[macro_export]
 macro_rules! error_println {
-    () => ($crate::kernel::print::error_print!("\n"));
-    ($($arg:tt)*) => ($crate::kernel::print::error_print!("{}\n", format_args!($($arg)*)));
+    () => ($crate::error_print!("\n"));
+    ($($arg:tt)*) => ($crate::error_print!("{}\n", format_args!($($arg)*)));
 }
-
-pub(crate) use debug_print;
-pub(crate) use debug_println;
-pub(crate) use error_print;
-pub(crate) use error_println;
-pub(crate) use vc_print;
-pub(crate) use vc_println;
