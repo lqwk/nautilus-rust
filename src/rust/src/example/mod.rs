@@ -1,7 +1,4 @@
-use crate::kernel::shell::register_shell_command;
-use alloc::vec::Vec;
-
-use crate::kernel::print::vc_println;
+use crate::prelude::*;
 
 fn example(a: i32, b: i32) -> i32 {
     vc_println!("Hello, this is the Rust example module!");
@@ -19,6 +16,7 @@ fn example(a: i32, b: i32) -> i32 {
 }
 
 register_shell_command!("rust", "rust", |_, _| {
-    vc_println!("Entered Rust code.");
+    debug_println!("Entered Rust code.");
     example(8, 1);
+    debug_println!("Exiting Rust code.");
 });

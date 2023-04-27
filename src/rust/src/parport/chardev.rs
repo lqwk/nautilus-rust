@@ -11,7 +11,9 @@ use core::{
 use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
 use crate::kernel::utils::to_c_string;
-use crate::kernel::{bindings, print::vc_println};
+use crate::kernel::bindings;
+
+use crate::prelude::*;
 
 use super::{lock::IRQLock, Parport};
 
