@@ -1,11 +1,18 @@
 use bindgen;
 
+use std::process::Command;
 use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
-    println!("cargo:rerun-if-changed=bindgen_wrapper.h");
+    // Tell cargo to invalidate the built crate whenever the kernel config changes
+    println!("cargo:rerun-if-changed=../../.config");
+
+    // Regenerate the wrapper
+    Command::new("bash")
+        .arg("gen_wrapper.sh")
+        .output()
+        .expect("Unable to run gen_wrapper.sh");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
