@@ -197,16 +197,11 @@ fn discover_and_bringup_devices() -> Result<(), Error> {
     Ok(())
 }
 
-#[no_mangle]
-pub extern "C" fn nk_parport_init() -> c_int {
-    vc_println!("partport init");
+register_shell_command!("parport", "parport", |_, _| {
+    vc_println!("parport init");
     if discover_and_bringup_devices().is_err() {
         -1
     } else {
         0
     }
-}
-
-register_shell_command!("parport", "parport", |_, _| {
-    nk_parport_init();
 });
