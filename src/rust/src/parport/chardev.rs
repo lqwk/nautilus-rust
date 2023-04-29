@@ -1,17 +1,15 @@
-const CHARDEV_RW: c_int =
-    (bindings::NK_CHARDEV_READABLE | bindings::NK_CHARDEV_WRITEABLE) as c_int;
+const CHARDEV_RW: c_int = (bindings::NK_CHARDEV_READABLE | bindings::NK_CHARDEV_WRITEABLE) as c_int;
 
 use core::{
     ffi::{c_int, c_void},
-    fmt::Error,
     intrinsics::write_bytes,
     ptr::null_mut,
 };
 
 use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
-use crate::kernel::utils::to_c_string;
 use crate::kernel::bindings;
+use crate::kernel::utils::to_c_string;
 
 use crate::prelude::*;
 
@@ -45,8 +43,8 @@ impl NkCharDev {
         }
     }
 
-    pub fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result<(), Error> {
-        vc_println!("register device");
+    pub fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result {
+        debug!("register device");
 
         if !self.dev.is_null() {
             panic!("attempted to register NkCharDev twice");
@@ -69,7 +67,12 @@ impl NkCharDev {
         }
 
         self.dev = r;
-        (!r.is_null()).then(|| ()).ok_or(Error)
+
+        if r.is_null() {
+            Err(-1)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -104,7 +107,7 @@ pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
 }
 
 pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
-    vc_println!("read!");
+    debug!("read!");
 
     let s = unsafe { deref_locked_state(state) };
     let mut p = s.lock();
@@ -121,7 +124,7 @@ pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
 }
 
 pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
-    vc_println!("write!");
+    debug!("write!");
 
     let s = unsafe { deref_locked_state(state) };
     let mut p = s.lock();

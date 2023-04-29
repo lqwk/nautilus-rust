@@ -16,7 +16,8 @@ fn example(a: i32, b: i32) -> i32 {
 }
 
 register_shell_command!("rust", "rust", |_, _| {
-    debug_println!("Entered Rust code.");
+    debug!("Entered Rust code.");
     example(8, 1);
-    debug_println!("Exiting Rust code.");
+    debug!("Exiting Rust code.");
+    0
 });

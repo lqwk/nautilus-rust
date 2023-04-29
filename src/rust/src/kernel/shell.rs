@@ -24,8 +24,7 @@ macro_rules! register_shell_command {
         // as C can. We use paste to do this.
         paste::paste! {
             extern "C" fn [<handle_ $cmd>](buf: *mut i8, priv_: *mut core::ffi::c_void) -> i32 {
-                $handler(buf, priv_);
-                0
+                $handler(buf, priv_)
             }
 
             // Nautilus shell commands are registered by placing a pointer in the

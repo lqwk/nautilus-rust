@@ -3,6 +3,12 @@
 #![feature(c_size_t)]
 #![feature(lang_items)]
 
+// This enables the `some_result.inspect_err(...)` function,
+// which makes error logging much more ergonomic. This feature
+// is not strictly necessary, and we could define this method
+// in our own `ResultExt` trait, but this seems likely to be
+// stabilized.
+#![feature(result_option_inspect)]
 
 // cfg_accessible is SUPER UNSTABLE and its API may be changed
 // or removed without warning. But we need it so that we can

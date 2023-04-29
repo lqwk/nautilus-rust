@@ -7,7 +7,7 @@
 
 // direct wrappers around inline functions and macros
 
-void debug_error_print(char* s) {
+void _glue_log_print(char* s) {
     if (__cpu_state_get_cpu()) {
         int _p=preempt_is_disabled();
         preempt_disable();

@@ -7,6 +7,7 @@ pub mod bindings;
 pub mod allocator;
 pub mod shell;
 pub mod print;
+pub mod error;
 pub mod utils;
 
 #[panic_handler]

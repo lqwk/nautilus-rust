@@ -1,6 +1,3 @@
-use core::ffi::c_int;
-use core::fmt::Error;
-
 use bitfield::bitfield;
 
 use crate::prelude::*;
@@ -59,7 +56,7 @@ pub struct Parport {
 }
 
 impl Parport {
-    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq) -> Result<Arc<IRQLock<Parport>>, Error> {
+    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq) -> Result<Arc<IRQLock<Parport>>> {
         let p = Parport {
             dev,
             port,
@@ -72,9 +69,14 @@ impl Parport {
         {
             let mut locked_p = shared_p.lock();
             unsafe {
-                locked_p.irq.register(shared_p.clone())?;
+                locked_p.irq.register(shared_p.clone()).inspect_err(|e| {
+                    error!("Failed to register interrupt handler. Error code {e}.")
+                })?;
             }
-            locked_p.dev.register(shared_p.clone())?;
+            locked_p
+                .dev
+                .register(shared_p.clone())
+                .inspect_err(|e| error!("Failed to register chardev. Error code {e}."))?;
             locked_p.init();
         }
 
@@ -101,14 +103,15 @@ impl Parport {
         }
     }
 
-    pub fn write(&mut self, data: u8) -> Result<(), Error> {
+    pub fn write(&mut self, data: u8) -> Result {
         if !self.is_ready() {
-            return Err(Error);
+            debug!("Unable to write while device is busy.");
+            return Err(-1);
         }
         self.state = ParportStatus::Busy;
 
         // mark device as busy
-        vc_println!("setting device as busy");
+        debug!("setting device as busy");
         let mut stat = self.port.read_stat();
         stat.set_busy(false); // stat.busy = 0
         self.port.write_stat(&stat);
@@ -116,17 +119,17 @@ impl Parport {
         self.wait_for_attached_device();
 
         // set device to output mode
-        vc_println!("setting device to output mode");
+        debug!("setting device to output mode");
         let mut ctrl = self.port.read_ctrl();
         ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
         self.port.write_ctrl(&ctrl);
 
         // write data byte to data register
-        vc_println!("writing data to device");
+        debug!("writing data to device");
         self.port.write_data(&DataReg { data });
 
         // strobe the attached printer
-        vc_println!("strobing device");
+        debug!("strobing device");
         ctrl.set_strobe(false); // ctrl.strobe = 0
         self.port.write_ctrl(&ctrl);
         ctrl.set_strobe(true); // ctrl.strobe = 1
@@ -137,14 +140,15 @@ impl Parport {
         Ok(())
     }
 
-    fn read(&mut self) -> Result<u8, Error> {
+    fn read(&mut self) -> Result<u8> {
         if !self.is_ready() {
-            return Err(Error);
+            debug!("Unable to read while device is busy.");
+            return Err(-1);
         }
         self.state = ParportStatus::Busy;
 
         // mark device as busy
-        vc_println!("setting device as busy");
+        debug!("setting device as busy");
         let mut stat = self.port.read_stat();
         stat.set_busy(false); // stat.busy = 0
         self.port.write_stat(&stat);
@@ -178,35 +182,30 @@ impl Parport {
     }
 }
 
-unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result<(), Error> {
+unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result {
     let port = unsafe { ParportIO::new(port) };
     let irq = Irq::new(irq);
     let dev = NkCharDev::new(name);
     let parport = Parport::new(dev, port, irq)?;
-    vc_println!("{}", &parport.lock().get_name());
+    debug!("{}", &parport.lock().get_name());
 
     Ok(())
 }
 
-fn discover_and_bringup_devices() -> Result<(), Error> {
+fn discover_and_bringup_devices() -> Result {
     unsafe {
         // PARPORT0_BASE and PARPORT0_IRQ are valid and correct
-        bringup_device("parport0", PARPORT0_BASE, PARPORT0_IRQ)?;
+        bringup_device("parport0", PARPORT0_BASE, PARPORT0_IRQ)
+            .inspect_err(|e| error!("Failed to bring up parport device. Error code {e}."))?;
     }
 
     Ok(())
-}
-
-#[no_mangle]
-pub extern "C" fn nk_parport_init() -> c_int {
-    vc_println!("partport init");
-    if discover_and_bringup_devices().is_err() {
-        -1
-    } else {
-        0
-    }
 }
 
 register_shell_command!("parport", "parport", |_, _| {
-    nk_parport_init();
+    vc_println!("Initializing parport ...");
+    discover_and_bringup_devices()
+        .inspect(|_| vc_println!("Done."))
+        .inspect_err(|_| vc_println!("Unable to bring up parport device!"))
+        .as_error_code()
 });

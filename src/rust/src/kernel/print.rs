@@ -48,7 +48,7 @@ pub fn _print(args: fmt::Arguments) {
 }
 
 extern "C" {
-    fn debug_error_print(s: *mut i8);
+    fn _glue_log_print(s: *mut i8);
 }
 
 // A ZST for debug/error printing
@@ -70,7 +70,7 @@ impl fmt::Write for _LogWriter {
         const SIZE: usize = 1024;
         let mut buf: [u8; SIZE] = [0; SIZE];
 
-        // TODO: why are the debug_println/error_println macros able to
+        // TODO: why are the debug/error/info/warn macros able to
         // print the newline even when "s" is truncated? Shouldn't we
         // need a newline in TRUNC? Weirdly it's working just fine
         // now, but why?
@@ -88,47 +88,52 @@ impl fmt::Write for _LogWriter {
         };
         // SAFETY: FFI call.
         unsafe {
-            debug_error_print(buf.as_ptr() as *mut i8);
+            _glue_log_print(buf.as_ptr() as *mut i8);
         }
         Ok(())
     }
 }
 
 #[doc(hidden)]
-#[allow(unused_imports)]
 pub fn _log(_args: fmt::Arguments) {
     use core::fmt::Write;
-    #[cfg_accessible(crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
     _LogWriter.write_fmt(_args).unwrap();
 }
 
-/// Prints a debug message (truncated if excessively long).
+/// Logs a debug message (truncated if excessively long).
+/// This macro is a noop if Rust debug prints are disabled in Kconfig.
 #[macro_export]
-macro_rules! debug_print {
-    ($($arg:tt)*) => {
-        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): DEBUG: {}" , format_args!($($arg)*)))
-    };
+macro_rules! debug {
+    ($($arg:tt)*) => {{
+        #[cfg_accessible($crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
+        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): DEBUG: {}\n",
+                                    format_args!($($arg)*)));
+    }};
 }
 
-/// Prints a debug message (truncated if excessively long), with an implicit newline.
+/// Logs an error message (truncated if excessively long).
 #[macro_export]
-macro_rules! debug_println {
-    () => ($crate::debug_print!("\n"));
-    ($($arg:tt)*) => ($crate::debug_print!("{}\n", format_args!($($arg)*)));
+macro_rules! error {
+    ($($arg:tt)*) => {{
+        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR: {}\n",
+                                    format_args!($($arg)*)));
+    }};
 }
 
-/// Prints an error message (truncated if excessively long).
+/// Logs a warning message (truncated if excessively long).
 #[macro_export]
-macro_rules! error_print {
-    ($($arg:tt)*) => {
-        #[cfg_accessible(crate::kernel::bindings::NAUT_CONFIG_DEBUG_PRINTS)]
-        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR: {}" , format_args!($($arg)*)))
-    };
+macro_rules! warn {
+    ($($arg:tt)*) => {{
+        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): WARNING {}\n",
+                                    format_args!($($arg)*)));
+    }};
 }
 
-/// Prints an error message (truncated if excessively long), with an implicit newline.
+/// Logs an info message (truncated if excessively long).
 #[macro_export]
-macro_rules! error_println {
-    () => ($crate::error_print!("\n"));
-    ($($arg:tt)*) => ($crate::error_print!("{}\n", format_args!($($arg)*)));
+macro_rules! info {
+    ($($arg:tt)*) => {{
+        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): {}\n",
+                                    format_args!($($arg)*)));
+    }};
 }
