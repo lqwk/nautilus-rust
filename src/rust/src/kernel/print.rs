@@ -70,7 +70,7 @@ impl fmt::Write for _LogWriter {
         const SIZE: usize = 1024;
         let mut buf: [u8; SIZE] = [0; SIZE];
 
-        // TODO: why are the debug_println/error_println macros able to
+        // TODO: why are the debug/error/info/warn macros able to
         // print the newline even when "s" is truncated? Shouldn't we
         // need a newline in TRUNC? Weirdly it's working just fine
         // now, but why?
@@ -105,36 +105,36 @@ pub fn _log(_args: fmt::Arguments) {
 /// in Kconfig.
 #[macro_export]
 macro_rules! debug {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         #[cfg_accessible(crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): DEBUG: {}\n",
                                     format_args!($($arg)*)));
-    };
+    }};
 }
 
 /// Logs an error message (truncated if excessively long).
 #[macro_export]
 macro_rules! error {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR: {}\n",
                                     format_args!($($arg)*)));
-    };
+    }};
 }
 
 /// Logs a warning message (truncated if excessively long).
 #[macro_export]
 macro_rules! warn {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): WARNING {}\n",
                                     format_args!($($arg)*)));
-    };
+    }};
 }
 
 /// Logs an info message (truncated if excessively long).
 #[macro_export]
 macro_rules! info {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): {}\n",
                                     format_args!($($arg)*)));
-    };
+    }};
 }

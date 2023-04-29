@@ -1,12 +1,12 @@
 use core::{
     ffi::{c_int, c_void},
-    fmt::Error,
     ptr::null,
 };
 
 use alloc::sync::Arc;
 
 use crate::kernel::bindings;
+use crate::prelude::*;
 
 use super::{lock::IRQLock, Parport};
 
@@ -25,9 +25,9 @@ impl Irq {
         }
     }
 
-    pub unsafe fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result<(), Error> {
+    pub unsafe fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result {
         if self.registered {
-            return Err(Error);
+            return Err(-1);
         }
 
         let handler = interrupt_handler;
@@ -50,7 +50,7 @@ impl Irq {
         } else {
             // taking back `Arc` is safe if handler registration never succeeded
             let _ = unsafe { Arc::from_raw(self.arc_ptr) };
-            Err(Error)
+            Err(result)
         }
     }
 }
