@@ -67,7 +67,12 @@ impl NkCharDev {
         }
 
         self.dev = r;
-        (!r.is_null()).then(|| ()).ok_or(-1)
+
+        if r.is_null() {
+            Err(-1)
+        } else {
+            Ok(())
+        }
     }
 }
 

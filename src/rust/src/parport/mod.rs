@@ -203,8 +203,9 @@ fn discover_and_bringup_devices() -> Result {
 }
 
 register_shell_command!("parport", "parport", |_, _| {
-    vc_println!("parport init");
+    vc_println!("Initializing parport ...");
     discover_and_bringup_devices()
+        .inspect(|_| vc_println!("Done."))
         .inspect_err(|_| vc_println!("Unable to bring up parport device!"))
         .as_error_code()
 });
