@@ -29,8 +29,8 @@ pub trait ResultExt {
 impl ResultExt for Result {
     fn as_error_code(&self) -> c_int {
         match self {
-            Ok(_) => 0,
-            Err(e) => *e
+            &Ok(_) => 0,
+            &Err(e) => e
         }
     }
 }

@@ -101,12 +101,11 @@ pub fn _log(_args: fmt::Arguments) {
 }
 
 /// Logs a debug message (truncated if excessively long).
-/// This macro is a noop if Rust debug prints are disabled
-/// in Kconfig.
+/// This macro is a noop if Rust debug prints are disabled in Kconfig.
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {{
-        #[cfg_accessible(crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
+        #[cfg_accessible($crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): DEBUG: {}\n",
                                     format_args!($($arg)*)));
     }};

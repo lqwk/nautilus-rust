@@ -32,14 +32,13 @@ impl Irq {
 
         let handler = interrupt_handler;
         self.arc_ptr = Arc::into_raw(parport);
-        let result;
-        unsafe {
-            result = bindings::register_irq_handler(
+        let result = unsafe {
+            bindings::register_irq_handler(
                 self.num.into(),
                 Some(handler),
                 self.arc_ptr as *mut c_void,
-            );
-        }
+            )
+        };
 
         if result == 0 {
             unsafe {
