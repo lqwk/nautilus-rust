@@ -30,7 +30,7 @@ impl Irq {
             return Err(-1);
         }
 
-        //let handler = interrupt_handler;
+        //Slet handler = interrupt_handler;
         self.arc_ptr = Arc::into_raw(parport);
         let result = unsafe {
             bindings::register_irq_handler(

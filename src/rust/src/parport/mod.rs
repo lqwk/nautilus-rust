@@ -3,9 +3,7 @@ use core::{
     ffi::{c_int, c_void},
     ptr::null,
 };
-
 use crate::prelude::*;
-
 use crate::kernel::bindings;
 use chardev::NkCharDev;
 use irq::Irq;
@@ -214,6 +212,7 @@ register_shell_command!("parport", "parport", |_, _| {
         .inspect_err(|_| vc_println!("Unable to bring up parport device!"))
         .as_error_code()
 });
+
 
 
 unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
