@@ -8,7 +8,7 @@ use alloc::sync::Arc;
 use crate::kernel::bindings;
 use crate::prelude::*;
 
-use super::{lock::IRQLock};
+use super::{lock::IRQLock, interrupt_handler};
 
 pub struct Irq<T> {
     num: u8,
@@ -26,7 +26,7 @@ impl<T> Irq<T> {
         }
     }
 
-    pub unsafe fn register(&mut self, parport: Arc<IRQLock<T>>) -> Result { // Replaced the Result type with a more specific one
+    pub unsafe fn register(&mut self, parport: Arc<IRQLock<T>>) -> Result { 
         if self.registered {
             return Err(-1);
         }
@@ -66,7 +66,7 @@ impl<T> Drop for Irq<T> { // Added the missing type parameter <T>
     }
 }
 
-unsafe fn deref_locked_state<'a, T>(state: *mut c_void) -> &'a IRQLock<T> {
+pub unsafe fn deref_locked_state<'a, T>(state: *mut c_void) -> &'a IRQLock<T> {
     // caller must guarantee `state`, and the object it points to, was not mutated
     //
     // caller must not drop the strong reference count of the containing `Arc` to 0 while
@@ -75,20 +75,3 @@ unsafe fn deref_locked_state<'a, T>(state: *mut c_void) -> &'a IRQLock<T> {
     unsafe { l.as_ref() }.unwrap()
 }
 
-pub unsafe extern "C" fn interrupt_handler<T>(
-    _excp: *mut bindings::excp_entry_t,
-    _vec: bindings::excp_vec_t,
-    state: *mut c_void,
-) -> c_int {
-    let p = unsafe { deref_locked_state::<T>(state) };
-    let mut l = p.lock();
-    l.set_ready();
-
-    // IRQ_HANDLER_END
-    unsafe {
-        bindings::apic_do_eoi();
-    }
-    0
-    // l falls out of scope here, releasing the lock and reenabling interrupts after
-    // IRQ_HANDLER_END. Redundant, but should work correctly.
-}

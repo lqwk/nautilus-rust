@@ -1,12 +1,17 @@
 use bitfield::bitfield;
+use core::{
+    ffi::{c_int, c_void},
+    ptr::null,
+};
 
 use crate::prelude::*;
 
 use chardev::NkCharDev;
 use irq::Irq;
 use portio::ParportIO;
+use crate::kernel::bindings;
 
-use self::{lock::IRQLock, portio::io_delay};
+use self::{lock::IRQLock, portio::io_delay, irq::deref_locked_state};
 
 mod chardev;
 mod irq;
@@ -48,15 +53,15 @@ enum ParportStatus {
     Busy,
 }
 
-pub struct Parport {
+pub struct Parport<T> { // Add the type parameter T
     dev: NkCharDev,
     port: ParportIO,
-    irq: Irq,
+    irq: Irq<T>, // Add the type parameter T here
     state: ParportStatus,
 }
 
-impl Parport {
-    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq) -> Result<Arc<IRQLock<Parport>>> {
+impl<T> Parport<T> { // Add the type parameter T here
+    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq<T>) -> Result<Arc<IRQLock<Parport<T>>>> { // Add the type parameter T here
         let p = Parport {
             dev,
             port,
@@ -182,9 +187,9 @@ impl Parport {
     }
 }
 
-unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result {
+unsafe fn bringup_device<T: 'static>(name: &str, port: u16, irq: u8) -> Result { // Add the type parameter T and the 'static lifetime bound
     let port = unsafe { ParportIO::new(port) };
-    let irq = Irq::new(irq);
+    let irq = Irq::<T>::new(irq); // Add the type parameter T here
     let dev = NkCharDev::new(name);
     let parport = Parport::new(dev, port, irq)?;
     debug!("{}", &parport.lock().get_name());
@@ -200,6 +205,24 @@ fn discover_and_bringup_devices() -> Result {
     }
 
     Ok(())
+}
+
+pub unsafe extern "C" fn interrupt_handler<T>( // Update the interrupt_handler function definition to match the one in your previous Rust code snippet
+    _excp: *mut bindings::excp_entry_t,
+    _vec: bindings::excp_vec_t,
+    state: *mut c_void,
+) -> c_int {
+    let p = unsafe { deref_locked_state::<T>(state) };
+    let mut l = p.lock();
+    l.set_ready();
+
+    // IRQ_HANDLER_END
+    unsafe {
+        bindings::apic_do_eoi();
+    }
+    0
+    // l falls out of scope here, releasing the lock and reenabling interrupts after
+    // IRQ_HANDLER_END. Redundant, but should work correctly.
 }
 
 register_shell_command!("parport", "parport", |_, _| {
