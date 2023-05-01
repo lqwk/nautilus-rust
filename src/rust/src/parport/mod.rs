@@ -52,14 +52,14 @@ enum ParportStatus {
 }
 
 pub struct Parport {
-    dev: NkCharDev<Parport>,
+    dev: NkCharDev,
     port: ParportIO,
     irq: Irq<Parport>,
     state: ParportStatus,
 }
 
 impl Parport {
-    pub fn new(dev: NkCharDev<Parport>, port: ParportIO, irq: Irq<Parport>) -> Result<Arc<IRQLock<Parport>>> {
+    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq<Parport>) -> Result<Arc<IRQLock<Parport>>> {
         let p = Parport {
             dev,
             port,
