@@ -10,13 +10,14 @@ use crate::prelude::*;
 
 use super::{lock::IRQLock};
 
-pub struct Irq {
+pub struct Irq<T> {
     num: u8,
     registered: bool,
     arc_ptr: *const IRQLock<T>,
 }
 
-impl Irq {
+// Added the missing type parameter <T> in the impl block
+impl<T> Irq<T> {
     pub fn new(num: u8) -> Self {
         Irq {
             num,
@@ -25,12 +26,12 @@ impl Irq {
         }
     }
 
-    pub unsafe fn register<T>(&mut self, parport: Arc<IRQLock<T>>) -> Result<(), c_int> {
+    pub unsafe fn register(&mut self, parport: Arc<IRQLock<T>>) -> Result { // Replaced the Result type with a more specific one
         if self.registered {
             return Err(-1);
         }
 
-        let handler = interrupt_handler;
+        let handler = interrupt_handler::<T>; // Added the type parameter <T> for the handler
         self.arc_ptr = Arc::into_raw(parport);
         let result = unsafe {
             bindings::register_irq_handler(
@@ -54,7 +55,7 @@ impl Irq {
     }
 }
 
-impl Drop for Irq {
+impl<T> Drop for Irq<T> { // Added the missing type parameter <T>
     fn drop(&mut self) {
         if self.registered {
             unsafe {
