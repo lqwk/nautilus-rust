@@ -8,15 +8,15 @@ use alloc::sync::Arc;
 use crate::kernel::bindings;
 use crate::prelude::*;
 
-use super::{lock::IRQLock, Parport};
+use super::{lock::IRQLock};
 
-pub struct Irq {
+pub struct Irq<T> {
     num: u8,
     registered: bool,
-    arc_ptr: *const IRQLock<Parport>,
+    arc_ptr: *const IRQLock<T>,
 }
 
-impl Irq {
+impl<T> Irq<T> {
     pub fn new(num: u8) -> Self {
         Irq {
             num,
@@ -25,7 +25,7 @@ impl Irq {
         }
     }
 
-    pub unsafe fn register(&mut self, parport: Arc<IRQLock<Parport>>, handler: unsafe extern "C" fn(*mut bindings::excp_entry_t, bindings::excp_vec_t, *mut c_void) -> c_int) -> Result {
+    pub unsafe fn register(&mut self, parport: Arc<IRQLock<T>>, handler: unsafe extern "C" fn(*mut bindings::excp_entry_t, bindings::excp_vec_t, *mut c_void) -> c_int) -> Result {
         if self.registered {
             return Err(-1);
         }
@@ -54,7 +54,7 @@ impl Irq {
     }
 }
 
-impl Drop for Irq {
+impl<T> Drop for Irq<T> {
     fn drop(&mut self) {
         if self.registered {
             unsafe {
