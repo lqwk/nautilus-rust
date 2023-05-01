@@ -8,12 +8,12 @@ use alloc::sync::Arc;
 use crate::kernel::bindings;
 use crate::prelude::*;
 
-use super::{lock::IRQLock, Parport};
+use super::{lock::IRQLock};
 
 pub struct Irq {
     num: u8,
     registered: bool,
-    arc_ptr: *const IRQLock<Parport>,
+    arc_ptr: *const IRQLock<T>,
 }
 
 impl Irq {
@@ -25,7 +25,7 @@ impl Irq {
         }
     }
 
-    pub unsafe fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result {
+    pub unsafe fn register<T>(&mut self, parport: Arc<IRQLock<T>>) -> Result<(), c_int> {
         if self.registered {
             return Err(-1);
         }
@@ -65,21 +65,21 @@ impl Drop for Irq {
     }
 }
 
-unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
+unsafe fn deref_locked_state<'a, T>(state: *mut c_void) -> &'a IRQLock<T> {
     // caller must guarantee `state`, and the object it points to, was not mutated
     //
     // caller must not drop the strong reference count of the containing `Arc` to 0 while
     // the returned reference exists
-    let l = state as *const IRQLock<Parport>;
+    let l = state as *const IRQLock<T>;
     unsafe { l.as_ref() }.unwrap()
 }
 
-pub unsafe extern "C" fn interrupt_handler(
+pub unsafe extern "C" fn interrupt_handler<T>(
     _excp: *mut bindings::excp_entry_t,
     _vec: bindings::excp_vec_t,
     state: *mut c_void,
 ) -> c_int {
-    let p = unsafe { deref_locked_state(state) };
+    let p = unsafe { deref_locked_state::<T>(state) };
     let mut l = p.lock();
     l.set_ready();
 
