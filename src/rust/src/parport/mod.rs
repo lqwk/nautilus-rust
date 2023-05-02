@@ -78,7 +78,7 @@ impl Parport {
             }
             locked_p
                 .dev
-                .register(shared_p.clone())
+                .register::<Parport>(shared_p.clone())
                 .inspect_err(|e| error!("Failed to register chardev. Error code {e}."))?;
             locked_p.init();
         }
