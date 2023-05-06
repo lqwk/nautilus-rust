@@ -1,3 +1,8 @@
 #! /usr/bin/env bash
   
-make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out -drive file=disk.img,if=virtio
+if test -e "disk.img"; then
+    make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out -drive file=disk.img,if=virtio
+else
+    make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out
+fi
+
