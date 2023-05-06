@@ -1,6 +1,4 @@
 #!/bin/bash
-set -euo pipefail
-
 while [[ $# -gt 0 ]]; do
   key="$1"
 
@@ -26,6 +24,8 @@ if [[ -z "$mount" || -z "$wad" ]]; then
   echo "Usage: $0 --mount /path/to/mount --wad /path/to/wad"
   exit 1
 fi
+
+set -euo pipefail
 
 dd if=/dev/zero of=disk.img bs=1024 count=65536
 mkfs.fat -F 32 disk.img
