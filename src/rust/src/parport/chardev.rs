@@ -20,6 +20,13 @@ pub struct NkCharDev {
     name: String,
 }
 
+pub trait CharDevOps {
+    fn is_ready(&self) -> bool;
+    fn read(&mut self) -> Result<u8>;
+    fn write(&mut self, byte: u8) -> Result<()>;
+}
+
+
 impl NkCharDev {
     pub fn get_name(&self) -> String {
         self.name.to_owned()
@@ -81,7 +88,7 @@ impl Drop for NkCharDev {
         if let Some(ptr) = unsafe { self.dev.as_mut() } {
             unsafe {
                 // taking back `Arc` is safe from any non-null `chardev` we registered
-                let _ = Arc::from_raw(ptr.dev.state as *const IRQLock<_>);
+                let _ = Arc::from_raw(ptr.dev.state);
                 bindings::nk_char_dev_unregister(ptr);
             }
         }
@@ -97,7 +104,10 @@ unsafe fn deref_locked_state<'a, T>(state: *mut c_void) -> &'a IRQLock<T> {
     unsafe { l.as_ref() }.unwrap()
 }
 
-pub unsafe extern "C" fn status<T>(state: *mut c_void) -> c_int {
+pub unsafe extern "C" fn status<T>(state: *mut c_void) -> c_int 
+where
+    T: CharDevOps,
+    {
     let p = unsafe { deref_locked_state::<T>(state) };
     if p.lock().is_ready() {
         CHARDEV_RW
@@ -106,10 +116,13 @@ pub unsafe extern "C" fn status<T>(state: *mut c_void) -> c_int {
     }
 }
 
-pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
+pub unsafe extern "C" fn read<T>(state: *mut c_void, dest: *mut u8) -> c_int 
+where
+    T: CharDevOps,
+    {
     debug!("read!");
 
-    let s = unsafe { deref_locked_state(state) };
+    let s = unsafe { deref_locked_state::<T>(state) };
     let mut p = s.lock();
     match p.read() {
         Ok(v) => {
@@ -123,10 +136,13 @@ pub unsafe extern "C" fn read(state: *mut c_void, dest: *mut u8) -> c_int {
     }
 }
 
-pub unsafe extern "C" fn write(state: *mut c_void, src: *mut u8) -> c_int {
+pub unsafe extern "C" fn write<T>(state: *mut c_void, src: *mut u8) -> c_int 
+where
+    T: CharDevOps,
+    {
     debug!("write!");
 
-    let s = unsafe { deref_locked_state(state) };
+    let s = unsafe { deref_locked_state::<T>(state) };
     let mut p = s.lock();
     // caller guarantees `src` points to the correct byte to write
     let byte = unsafe { *src };
@@ -147,13 +163,46 @@ pub unsafe extern "C" fn get_characteristics(
     0
 }
 
+macro_rules! call_generic_function {
+    ($state:expr, $func:ident, $($arg:expr),*) => {{
+        let state = $state as *const Arc<IRQLock<dyn CharDevOps>>;
+        let arc = &*state;
+        let locked = arc.lock();
+        let obj = &*locked;
+        obj.$func($($arg),*)
+    }};
+}
+
+
+
+pub unsafe extern "C" fn read_wrapper(state: *mut c_void, dest: *mut u8) -> c_int {
+    match call_generic_function!(state, read, &mut *dest) {
+        Ok(_) => 0,
+        Err(e) => e,
+    }
+}
+
+pub unsafe extern "C" fn write_wrapper(state: *mut c_void, src: *mut u8) -> c_int {
+    match call_generic_function!(state, write, *src) {
+        Ok(_) => 0,
+        Err(e) => e,
+    }
+}
+
+pub unsafe extern "C" fn status_wrapper(state: *mut c_void) -> c_int {
+    call_generic_function!(state, status)
+}
+
+
+
 const CHARDEV_INTERFACE: bindings::nk_char_dev_int = bindings::nk_char_dev_int {
     get_characteristics: Some(get_characteristics),
-    read: Some(read),
-    write: Some(write),
-    status: Some(status),
+    read: Some(read_wrapper),
+    write: Some(write_wrapper),
+    status: Some(status_wrapper),
     dev_int: bindings::nk_dev_int {
         open: None,
         close: None,
     },
 };
+

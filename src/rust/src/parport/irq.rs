@@ -25,7 +25,13 @@ impl<T> Irq<T> {
         }
     }
 
-    pub unsafe fn register(&mut self, parport: Arc<IRQLock<T>>, handler: unsafe extern "C" fn(*mut bindings::excp_entry_t, bindings::excp_vec_t, *mut c_void) -> c_int) -> Result {
+    pub unsafe fn register(&mut self, 
+        parport: Arc<IRQLock<T>>, 
+        handler: unsafe extern "C" fn(
+            *mut bindings::excp_entry_t,
+            bindings::excp_vec_t, 
+            *mut c_void) -> c_int) 
+    -> Result {
         if self.registered {
             return Err(-1);
         }
