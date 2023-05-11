@@ -6,6 +6,7 @@ use core::{
 use alloc::boxed::Box;
 pub mod simple_executor;
 pub mod executor;
+pub mod utils;
 
 pub struct Task {
     id: TaskId, // new

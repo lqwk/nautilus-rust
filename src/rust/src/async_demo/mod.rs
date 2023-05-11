@@ -10,6 +10,8 @@ const CPU_FREQUENCY_HZ: u64 = 3_000_000_000; // Adjust this to match your actual
 use futures_util::task::AtomicWaker;
 static WAKER: AtomicWaker = AtomicWaker::new();
 
+use crate::task::utils::yield_now;
+
 
 fn kernel_main() -> () {
     let mut executor = Executor::new();
@@ -23,7 +25,7 @@ async fn async_number() -> u32 {
     let start = unsafe { _rdtsc() };
     let end = start + 5 * CPU_FREQUENCY_HZ;
     while unsafe { _rdtsc() } < end {
-        // Do nothing
+        yield_now().await;
     }
     42
 }
