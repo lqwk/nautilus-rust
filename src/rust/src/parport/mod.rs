@@ -1,18 +1,14 @@
 use bitfield::bitfield;
-use core::{
-    ffi::{c_int, c_void},
-    ptr::null,
-};
+use core::ffi::c_int;
 use crate::prelude::*;
-use crate::kernel::bindings;
-use chardev::NkCharDev;
-use irq::Irq;
+use chardev::{NkCharDev,CharDevOps};
 use portio::ParportIO;
 
 use self::{lock::IRQLock, portio::io_delay};
 
+use crate::kernel::irq;
+
 mod chardev;
-mod irq;
 mod lock;
 mod portio;
 
@@ -52,61 +48,52 @@ enum ParportStatus {
 }
 
 pub struct Parport {
-    dev: NkCharDev,
+    dev: NkCharDev<Parport>,
     port: ParportIO,
-    irq: Irq<Parport>,
+    irq: Option<irq::Registration<Parport>>,
     state: ParportStatus,
 }
 
-impl Parport {
-    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq<Parport>) -> Result<Arc<IRQLock<Parport>>> {
-        let p = Parport {
-            dev,
-            port,
-            irq,
-            state: ParportStatus::Ready,
-        };
+impl irq::Handler for Parport {
+    type State = IRQLock<Parport>;
 
-        let shared_p = Arc::new(IRQLock::new(p));
+    fn handle_irq(parport: &Self::State) -> c_int {
+        let mut l = parport.lock();
+        debug!("setting to ready");
+        l.set_ready();
+        0
+    }
+}
 
-        {
-            let mut locked_p = shared_p.lock();
-            unsafe {
-                locked_p.irq.register(shared_p.clone(), interrupt_handler).inspect_err(|e| {
-                    error!("Failed to register interrupt handler. Error code {e}.")
-                })?;
-            }
-            locked_p
-                .dev
-                .register::<Parport>(shared_p.clone())
-                .inspect_err(|e| error!("Failed to register chardev. Error code {e}."))?;
-            locked_p.init();
-        }
-
-        Ok(shared_p)
+impl CharDevOps for Parport {
+    fn is_ready(&mut self) -> bool {
+        self.state == ParportStatus::Ready
     }
 
-    fn init(&mut self) {
-        let mut ctrl = CtrlReg(0); // bidir = 0, which means we are in output mode
-        ctrl.set_select(true); // attached device selected
-        ctrl.set_init(true); // active low => 1 means we are not initializing it
-        ctrl.set_irq_en(true); // interrupt if we get an ack on the line
+    fn read(&mut self) -> Result<u8> {
+        if !self.is_ready() {
+            debug!("Unable to read while device is busy.");
+            return Err(-1);
+        }
+        self.state = ParportStatus::Busy;
+
+        // mark device as busy
+        debug!("setting device as busy");
+        let mut stat = self.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        self.port.write_stat(&stat);
+
+        self.wait_for_attached_device();
+
+        // disable output drivers for reading so no fire happens
+        let mut ctrl = self.port.read_ctrl();
+        ctrl.set_bidir_en(true); // active low to enable output
         self.port.write_ctrl(&ctrl);
+
+        Ok(self.port.read_data().data)
     }
 
-    fn wait_for_attached_device(&mut self) {
-        //let mut count = 0;
-        loop {
-            io_delay();
-            let stat = self.port.read_stat();
-            //count += 1;
-            if stat.busy() {
-                break;
-            }
-        }
-    }
-
-    pub fn write(&mut self, data: u8) -> Result {
+    fn write(&mut self, data: u8) -> Result {
         if !self.is_ready() {
             debug!("Unable to write while device is busy.");
             return Err(-1);
@@ -142,37 +129,63 @@ impl Parport {
 
         Ok(())
     }
+}
 
-    fn read(&mut self) -> Result<u8> {
-        if !self.is_ready() {
-            debug!("Unable to read while device is busy.");
-            return Err(-1);
+impl Parport {
+    pub fn new(dev: NkCharDev<Parport>, port: ParportIO, irq: u16) -> Result<Arc<IRQLock<Parport>>> {
+        let parport = Arc::new(IRQLock::new(Parport {
+            dev,
+            port,
+            irq: None,
+            state: ParportStatus::Ready,
+        }));
+
+        let irq = irq::Registration::try_new(irq, Arc::clone(&parport)).inspect_err(|_| {
+            error!("Parport IRQ registration failed.")
+        })?;
+
+        {
+            let mut locked_p = parport.lock();
+            locked_p.irq = Some(irq);
+            locked_p
+                .dev
+                .register(parport.clone())
+                .inspect_err(|e| error!("Failed to register chardev. Error code {e}."))?;
+            locked_p.init();
         }
-        self.state = ParportStatus::Busy;
 
-        // mark device as busy
-        debug!("setting device as busy");
-        let mut stat = self.port.read_stat();
-        stat.set_busy(false); // stat.busy = 0
-        self.port.write_stat(&stat);
-
-        self.wait_for_attached_device();
-
-        // disable output drivers for reading so no fire happens
-        let mut ctrl = self.port.read_ctrl();
-        ctrl.set_bidir_en(true); // active low to enable output
-        self.port.write_ctrl(&ctrl);
-
-        Ok(self.port.read_data().data)
+        Ok(parport)
     }
+
+    fn init(&mut self) {
+        let mut ctrl = CtrlReg(0); // bidir = 0, which means we are in output mode
+        ctrl.set_select(true); // attached device selected
+        ctrl.set_init(true); // active low => 1 means we are not initializing it
+        ctrl.set_irq_en(true); // interrupt if we get an ack on the line
+        self.port.write_ctrl(&ctrl);
+    }
+
+    fn wait_for_attached_device(&mut self) {
+        //let mut count = 0;
+        loop {
+            io_delay();
+            let stat = self.port.read_stat();
+            //count += 1;
+            if stat.busy() {
+                break;
+            }
+        }
+    }
+
+    
+
+    
 
     fn get_name(&self) -> String {
         self.dev.get_name()
     }
 
-    fn is_ready(&mut self) -> bool {
-        self.state == ParportStatus::Ready
-    }
+    
 
     fn set_ready(&mut self) {
         self.state = ParportStatus::Ready;
@@ -187,9 +200,8 @@ impl Parport {
 
 unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result {
     let port = unsafe { ParportIO::new(port) };
-    let irq = Irq::new(irq);
     let dev = NkCharDev::new(name);
-    let parport = Parport::new(dev, port, irq)?;
+    let parport = Parport::new(dev, port, irq as u16)?;
     debug!("{}", &parport.lock().get_name());
 
     Ok(())
@@ -212,32 +224,3 @@ register_shell_command!("parport", "parport", |_, _| {
         .inspect_err(|_| vc_println!("Unable to bring up parport device!"))
         .as_error_code()
 });
-
-
-
-unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
-    // caller must guarantee `state`, and the object it points to, was not mutated
-    //
-    // caller must not drop the strong reference count of the containing `Arc` to 0 while
-    // the returned reference exists
-    let l = state as *const IRQLock<Parport>;
-    unsafe { l.as_ref() }.unwrap()
-}
-
-pub unsafe extern "C" fn interrupt_handler(
-    _excp: *mut bindings::excp_entry_t,
-    _vec: bindings::excp_vec_t,
-    state: *mut c_void,
-) -> c_int {
-    let p = unsafe { deref_locked_state(state) };
-    let mut l = p.lock();
-    l.set_ready();
-
-    // IRQ_HANDLER_END
-    unsafe {
-        bindings::apic_do_eoi();
-    }
-    0
-    // l falls out of scope here, releasing the lock and reenabling interrupts after
-    // IRQ_HANDLER_END. Redundant, but should work correctly.
-}
