@@ -104,7 +104,7 @@ unsafe fn deref_locked_state<'a, T: CharDevOps>(state: *mut c_void) -> &'a IRQLo
     //
     // caller must not drop the strong reference count of the containing `Arc` to 0 while
     // the returned reference exists
-    let l = state as *const IRQLock<Parport>;
+    let l = state as *const IRQLock<T>;
     unsafe { l.as_ref() }.unwrap()
 }
 
