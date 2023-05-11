@@ -5,6 +5,7 @@ use crate::vc_println;
 
 pub mod bindings;
 pub mod allocator;
+pub mod irq;
 pub mod shell;
 pub mod print;
 pub mod error;
