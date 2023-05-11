@@ -1,15 +1,14 @@
 use bitfield::bitfield;
-
+use core::ffi::c_int;
 use crate::prelude::*;
-
 use chardev::NkCharDev;
-use irq::Irq;
 use portio::ParportIO;
 
 use self::{lock::IRQLock, portio::io_delay};
 
+use crate::kernel::irq;
+
 mod chardev;
-mod irq;
 mod lock;
 mod portio;
 
@@ -51,36 +50,45 @@ enum ParportStatus {
 pub struct Parport {
     dev: NkCharDev,
     port: ParportIO,
-    irq: Irq,
+    irq: Option<irq::Registration<Parport>>,
     state: ParportStatus,
 }
 
+impl irq::Handler for Parport {
+    type State = IRQLock<Parport>;
+
+    fn handle_irq(parport: &Self::State) -> c_int {
+        let mut l = parport.lock();
+        debug!("setting to ready");
+        l.set_ready();
+        0
+    }
+}
+
 impl Parport {
-    pub fn new(dev: NkCharDev, port: ParportIO, irq: Irq) -> Result<Arc<IRQLock<Parport>>> {
-        let p = Parport {
+    pub fn new(dev: NkCharDev, port: ParportIO, irq: u16) -> Result<Arc<IRQLock<Parport>>> {
+        let parport = Arc::new(IRQLock::new(Parport {
             dev,
             port,
-            irq,
+            irq: None,
             state: ParportStatus::Ready,
-        };
+        }));
 
-        let shared_p = Arc::new(IRQLock::new(p));
+        let irq = irq::Registration::try_new(irq, Arc::clone(&parport)).inspect_err(|_| {
+            error!("Parport IRQ registration failed.")
+        })?;
 
         {
-            let mut locked_p = shared_p.lock();
-            unsafe {
-                locked_p.irq.register(shared_p.clone()).inspect_err(|e| {
-                    error!("Failed to register interrupt handler. Error code {e}.")
-                })?;
-            }
+            let mut locked_p = parport.lock();
+            locked_p.irq = Some(irq);
             locked_p
                 .dev
-                .register(shared_p.clone())
+                .register(parport.clone())
                 .inspect_err(|e| error!("Failed to register chardev. Error code {e}."))?;
             locked_p.init();
         }
 
-        Ok(shared_p)
+        Ok(parport)
     }
 
     fn init(&mut self) {
@@ -184,9 +192,8 @@ impl Parport {
 
 unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result {
     let port = unsafe { ParportIO::new(port) };
-    let irq = Irq::new(irq);
     let dev = NkCharDev::new(name);
-    let parport = Parport::new(dev, port, irq)?;
+    let parport = Parport::new(dev, port, irq as u16)?;
     debug!("{}", &parport.lock().get_name());
 
     Ok(())

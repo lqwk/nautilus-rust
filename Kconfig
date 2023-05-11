@@ -169,6 +169,13 @@ menu "Build"
       help
         Adds support for Rust code, and builds the Rust example and Shell command
 
+    config DOOM_ENGINE
+      bool "Build the DOOM engine"
+      default n
+      depends on HPET && VIRTIO_GPU && FAT32_FILESYSTEM_DRIVER
+      help
+        Builds a Nautilus-compatible DOOM engine. Play DOOM, DOOM II, etc.,
+        from the shell.
    
     choice
       prompt "Compiler and related toolchain to use"

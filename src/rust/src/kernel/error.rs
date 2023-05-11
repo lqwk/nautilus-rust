@@ -24,6 +24,7 @@ pub type Result<T = ()> = core::result::Result<T, c_int>;
 
 pub trait ResultExt {
     fn as_error_code(&self) -> c_int;
+    fn from_error_code(code: c_int) -> Result;
 }
 
 impl ResultExt for Result {
@@ -31,6 +32,13 @@ impl ResultExt for Result {
         match self {
             &Ok(_) => 0,
             &Err(e) => e
+        }
+    }
+
+    fn from_error_code(code: c_int) -> Result {
+        match code {
+            0 => Ok(()),
+            c => Err(c)
         }
     }
 }
