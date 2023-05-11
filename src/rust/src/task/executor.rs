@@ -9,7 +9,9 @@ pub struct Executor {
     waker_cache: BTreeMap<TaskId, Waker>,
 }
 
+// Struct representing the executor which manages tasks and their execution.
 impl Executor {
+    // Constructor for Executor. Initializes the tasks, task_queue and waker_cache.
     pub fn new() -> Self {
         Executor {
             tasks: BTreeMap::new(),
@@ -18,6 +20,8 @@ impl Executor {
         }
     }
 
+    // Spawns a new task. 
+    // Inserts the task into tasks map and pushes the task_id into the task_queue.
     pub fn spawn(&mut self, task: Task) {
         let task_id = task.id;
         if self.tasks.insert(task.id, task).is_some() {
@@ -26,6 +30,8 @@ impl Executor {
         self.task_queue.push(task_id).expect("queue full");
     }
 
+    // Runs the executor, which continuously executes 
+    // tasks if they're ready, and sleeps if idle.
     pub fn run(&mut self) -> ! {
         loop {
             self.run_ready_tasks();
@@ -33,6 +39,9 @@ impl Executor {
         }
     }
 
+    // Runs tasks that are ready. 
+    // If a task is finished, it's removed from the tasks 
+    // and its waker is removed from the waker_cache.
     fn run_ready_tasks(&mut self) {
         // destructure `self` to avoid borrow checker errors
         let Self {
@@ -61,6 +70,8 @@ impl Executor {
         }
     }
 
+    // Puts the executor into sleep state if no tasks are in the queue. 
+    // Otherwise, enables the interrupts.
     fn sleep_if_idle(&self) {
         use x86_64::instructions::interrupts::{self, enable_and_hlt};
 
@@ -73,12 +84,16 @@ impl Executor {
     }
 }
 
+// Struct representing a TaskWaker, which includes a task_id and a reference to the task_queue.
 struct TaskWaker {
     task_id: TaskId,
     task_queue: Arc<ArrayQueue<TaskId>>,
 }
 
+// Implementation of TaskWaker.
 impl TaskWaker {
+    // Constructor for TaskWaker. 
+    // Initializes with a given task_id and a reference to the task_queue.
     fn new(task_id: TaskId, task_queue: Arc<ArrayQueue<TaskId>>) -> Waker {
         Waker::from(Arc::new(TaskWaker {
             task_id,
@@ -86,11 +101,14 @@ impl TaskWaker {
         }))
     }
 
+    // Pushes task_id into the task_queue to wake up the task.
     fn wake_task(&self) {
         self.task_queue.push(self.task_id).expect("task_queue full");
     }
 }
 
+// Implementation of Wake for TaskWaker.
+// Defines how a TaskWaker can wake up a task.
 impl Wake for TaskWaker {
     fn wake(self: Arc<Self>) {
         self.wake_task();
