@@ -13,7 +13,7 @@ use crate::kernel::utils::to_c_string;
 
 use crate::prelude::*;
 
-use super::lock::IRQLock;
+use super::{lock::IRQLock, Parport};
 
 pub struct NkCharDev {
     dev: *mut bindings::nk_char_dev,
@@ -43,7 +43,7 @@ impl NkCharDev {
         }
     }
 
-    pub fn register<T>(&mut self, dev: Arc<IRQLock<T>>) -> Result {
+    pub fn register(&mut self, parport: Arc<IRQLock<Parport>>) -> Result {
         debug!("register device");
 
         if !self.dev.is_null() {
@@ -52,7 +52,7 @@ impl NkCharDev {
 
         // TODO: fix leak of this C string on unregistration
         let name_bytes = to_c_string(&self.name);
-        let parport_ptr = Arc::into_raw(dev);
+        let parport_ptr = Arc::into_raw(parport);
         let cd = &CHARDEV_INTERFACE as *const bindings::nk_char_dev_int;
         let r;
         unsafe {
@@ -81,24 +81,24 @@ impl Drop for NkCharDev {
         if let Some(ptr) = unsafe { self.dev.as_mut() } {
             unsafe {
                 // taking back `Arc` is safe from any non-null `chardev` we registered
-                let _ = Arc::from_raw(ptr.dev.state as *const IRQLock<_>);
+                let _ = Arc::from_raw(ptr.dev.state as *const IRQLock<Parport>);
                 bindings::nk_char_dev_unregister(ptr);
             }
         }
     }
 }
 
-unsafe fn deref_locked_state<'a, T>(state: *mut c_void) -> &'a IRQLock<T> {
+unsafe fn deref_locked_state<'a>(state: *mut c_void) -> &'a IRQLock<Parport> {
     // caller must guarantee `state`, and the object it points to, was not mutated
     //
     // caller must not drop the strong reference count of the containing `Arc` to 0 while
     // the returned reference exists
-    let l = state as *const IRQLock<T>;
+    let l = state as *const IRQLock<Parport>;
     unsafe { l.as_ref() }.unwrap()
 }
 
-pub unsafe extern "C" fn status<T>(state: *mut c_void) -> c_int {
-    let p = unsafe { deref_locked_state::<T>(state) };
+pub unsafe extern "C" fn status(state: *mut c_void) -> c_int {
+    let p = unsafe { deref_locked_state(state) };
     if p.lock().is_ready() {
         CHARDEV_RW
     } else {
