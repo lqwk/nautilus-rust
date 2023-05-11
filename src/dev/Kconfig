@@ -180,6 +180,20 @@ config DEBUG_VIRTIO_BLK
     help
       Turn on debug prints for the Virtio Block Driver
 
+config VIRTIO_GPU
+    bool "Virtio GPU"
+    depends on VIRTIO_PCI
+    default n
+    help
+      Adds the Virtio GPU Driver
+
+config DEBUG_VIRTIO_GPU
+    bool "Debug Virtio GPU"
+    depends on DEBUG_PRINTS && VIRTIO_GPU
+    default n
+    help
+      Turn on debug prints for the Virtio GPU Driver
+
 config E1000_PCI
     bool "E1000 PCI NIC Driver"
     depends on X86_64_HOST

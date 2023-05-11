@@ -4,6 +4,7 @@ tags
 .config*
 *.bin
 *.iso
+*.img
 *.syms
 *.bc
 *.ll
@@ -20,7 +21,6 @@ tags
 /scripts/format_syms
 /.kconfig.d
 /nautilus.secs
-
 
 parport.out
 

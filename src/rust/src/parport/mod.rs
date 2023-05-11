@@ -1,10 +1,13 @@
 use bitfield::bitfield;
 use core::ffi::c_int;
+use core::ffi::c_int;
 use crate::prelude::*;
 use chardev::{NkCharDev,CharDevOps};
 use portio::ParportIO;
 
 use self::{lock::IRQLock, portio::io_delay};
+
+use crate::kernel::irq;
 
 use crate::kernel::irq;
 
@@ -50,6 +53,7 @@ enum ParportStatus {
 pub struct Parport {
     dev: NkCharDev<Parport>,
     port: ParportIO,
+    irq: Option<irq::Registration<Parport>>,
     irq: Option<irq::Registration<Parport>>,
     state: ParportStatus,
 }
@@ -201,6 +205,7 @@ impl Parport {
 unsafe fn bringup_device(name: &str, port: u16, irq: u8) -> Result {
     let port = unsafe { ParportIO::new(port) };
     let dev = NkCharDev::new(name);
+    let parport = Parport::new(dev, port, irq as u16)?;
     let parport = Parport::new(dev, port, irq as u16)?;
     debug!("{}", &parport.lock().get_name());
 

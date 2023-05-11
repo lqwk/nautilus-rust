@@ -14,7 +14,7 @@ use crate::kernel::utils::to_c_string;
 
 use crate::prelude::*;
 
-use super::lock::IRQLock;
+use super::{lock::IRQLock, Parport};
 
 pub trait CharDevOps {
     fn is_ready(&mut self) -> bool;
@@ -104,7 +104,7 @@ unsafe fn deref_locked_state<'a, T: CharDevOps>(state: *mut c_void) -> &'a IRQLo
     //
     // caller must not drop the strong reference count of the containing `Arc` to 0 while
     // the returned reference exists
-    let l = state as *const IRQLock<T>;
+    let l = state as *const IRQLock<Parport>;
     unsafe { l.as_ref() }.unwrap()
 }
 

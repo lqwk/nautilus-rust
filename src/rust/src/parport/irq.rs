@@ -59,14 +59,3 @@ impl<T> Irq<T> {
         }
     }
 }
-
-impl<T> Drop for Irq<T> {
-    fn drop(&mut self) {
-        if self.registered {
-            unsafe {
-                bindings::nk_mask_irq(self.num);
-                Arc::from_raw(self.arc_ptr);
-            }
-        }
-    }
-}
