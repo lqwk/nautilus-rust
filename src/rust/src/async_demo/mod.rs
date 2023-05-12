@@ -1,47 +1,48 @@
 use crate::prelude::*;
-
 use crate::task::{Task, executor::Executor};
-
-use core::arch::x86_64::_rdtsc;
-
-const CPU_FREQUENCY_HZ: u64 = 3_000_000_000; // Adjust this to match your actual CPU frequency
-
-
-use futures_util::task::AtomicWaker;
-static WAKER: AtomicWaker = AtomicWaker::new();
-
 use crate::task::utils::yield_now;
+use crate::kernel::timer;
 
 
 fn kernel_main() -> () {
     let mut executor = Executor::new();
-    executor.spawn(Task::new(example_task()));
+    executor.spawn(Task::new(example_task_1()));
     executor.spawn(Task::new(example_task_2()));
+    executor.spawn(Task::new(example_task_3()));
     executor.run();
 }
 
-
 async fn async_number() -> u32 {
-    let start = unsafe { _rdtsc() };
-    let end = start + 5 * CPU_FREQUENCY_HZ;
-    while unsafe { _rdtsc() } < end {
-        yield_now().await;
+    let ns = 5 * 1_000_000_000; // 5 seconds in nanoseconds
+    let start = timer::get_realtime(); // get the current time
+    while timer::get_realtime() < start + ns {
+        yield_now().await; // yield control to allow other tasks to run
     }
     42
 }
 
-async fn example_task() {
-    let number = async_number().await;
-    vc_println!("async number: {}", number);
-}
-
-async fn async_number_2() -> u32 {
-    69
+async fn example_task_1() {
+    vc_println!("Hello from example task 1!\nI'm a blocking task to show the timer!\nWaiting 3 seconds...");
+    let ns = 3 * 1_000_000_000; // 3 seconds in nanoseconds
+    timer::sleep(ns); // sleep for 3 seconds
+    vc_println!("Done sleeping!");
+    vc_println!("blocking number 1: {}", 8086);
 }
 
 async fn example_task_2() {
-    let number = async_number_2().await;
+    vc_println!("Hello from example task 2! Waiting 5 seconds...");
+    let number = async_number().await;
     vc_println!("async number 2: {}", number);
+}
+
+async fn async_number_3() -> u32 {
+    69
+}
+
+async fn example_task_3() {
+    vc_println!("Hello from example task 3! Number will return now...");
+    let number = async_number_3().await;
+    vc_println!("async number 3: {}", number);
 }
 
 register_shell_command!("rust_async", "rust_async", |_, _| {
