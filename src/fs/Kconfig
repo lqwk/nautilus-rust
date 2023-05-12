@@ -26,6 +26,11 @@ config DEBUG_FAT32_FILESYSTEM_DRIVER
         help
                 Turn on debug prints for the FAT32 filesystem
 
+config LITTLEFS_FILESYSTEM_DRIVER
+	bool "Enable LittleFS"
+	default n
+	help
+		Adds LittleFS support
 endmenu
 
     

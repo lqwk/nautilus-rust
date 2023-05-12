@@ -33,6 +33,7 @@
 
 #include <fs/ext2/ext2.h>
 #include <fs/fat32/fat32.h>
+#include <fs/lfs/lfs.h>
 
 
 #define FS_NAME_LEN     32
