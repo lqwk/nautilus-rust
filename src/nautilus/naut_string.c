@@ -618,55 +618,50 @@ strtox (const char * nptr, char ** endptr)
     return ret;
 }
 
+#define ALIGN (sizeof(size_t))
+#define ONES ((size_t)-1/UCHAR_MAX)
+#define HIGHS (ONES * (UCHAR_MAX/2+1))
+#define HASZERO(x) ((x)-ONES & ~(x) & HIGHS)
 
-size_t 
-strspn (const char * s, const char * accept) 
+char *__strchrnul(const char *s, int c)
 {
-    int match = 1;
-    int cnt = 0;
-    int i = 0;
-    int accept_len = strlen(accept);
-
-    while (match) {
-    match = 0;
-
-    for (i = 0; i < accept_len; i++) {
-        if (s[cnt] == accept[i]) {
-        match = 1;
-        cnt++;
-        break;
-        }
-    }
-    }
-
-    return cnt;
+	c = (unsigned char)c;
+	if (!c) return (char *)s + strlen(s);
+	for (; *s && *(unsigned char *)s != c; s++);
+	return (char *)s;
 }
 
+#define BITOP(a,b,op) \
+ ((a)[(size_t)(b)/(8*sizeof *(a))] op (size_t)1<<((size_t)(b)%(8*sizeof *(a))))
 
-size_t 
-strcspn (const char * s, const char * reject) 
-{
-    int match = 0;
-    int cnt = 0;
-    int i = 0;
-    int reject_len = strlen(reject);
+size_t strspn(const char *s, const char *c) {
+	const char *a = s;
+	size_t byteset[32/sizeof(size_t)] = { 0 };
 
-    while (!match) {
-    for (i = 0; i < reject_len; i++) {
-        if (s[cnt] == reject[i]) {
-        match = 1;
-        break;
-        }
-    }
+	if (!c[0]) return 0;
+	if (!c[1]) {
+		for (; *s == *c; s++);
+		return s-a;
+	}
 
-    if (!match) {
-        cnt++;
-    }
-
-    }
-
-    return cnt;
+	for (; *c && BITOP(byteset, *(unsigned char *)c, |=); c++);
+	for (; *s && BITOP(byteset, *(unsigned char *)s, &); s++);
+	return s-a;
 }
+
+size_t strcspn(const char *s, const char *c)
+{
+	const char *a = s;
+	size_t byteset[32/sizeof(size_t)];
+
+	if (!c[0] || !c[1]) return __strchrnul(s, *c)-a;
+
+	memset(byteset, 0, sizeof byteset);
+	for (; *c && BITOP(byteset, *(unsigned char *)c, |=); c++);
+	for (; *s && !BITOP(byteset, *(unsigned char *)s, &); s++);
+	return s-a;
+}
+
 
 
 char *
