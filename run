@@ -1,7 +1,20 @@
 #! /usr/bin/env bash
+#
+# Exit on any errors
+set -e
+
+# make the root filesystem (lfs)
+make ramdisk.img
+
+# hack: delete `src/asm/ramdisk.o` so the root filesystem gets updated (we use a RAM filesystem to avoid complications)
+rm -f src/asm/ramdisk.o
+
+# build the kernel and the isoimage for it
+make isoimage -j 8
+
   
-if test -e "disk.img"; then
-    make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out -drive file=disk.img,if=virtio
+if test -e "ramdisk.img"; then
+    make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out -drive file=ramdisk.img,if=virtio
 else
     make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out
 fi
