@@ -14,7 +14,7 @@ use crate::kernel::utils::to_c_string;
 
 use crate::prelude::*;
 
-use super::{lock::IRQLock, Parport};
+use super::{lock::IRQLock};
 
 pub trait CharDevOps {
     fn is_ready(&mut self) -> bool;
