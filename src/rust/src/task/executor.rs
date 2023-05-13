@@ -3,6 +3,12 @@ use alloc::{collections::BTreeMap, sync::Arc, task::Wake};
 use crossbeam_queue::ArrayQueue;
 use core::task::{Context, Poll, Waker};
 
+extern "C" {
+    fn irq_save() -> u8;
+    fn irq_restore(flags: u8);
+    fn glue_yield();
+}
+
 pub struct Executor {
     tasks: BTreeMap<TaskId, Task>,
     task_queue: Arc<ArrayQueue<TaskId>>,
@@ -70,18 +76,19 @@ impl Executor {
         }
     }
 
-    // Puts the executor into sleep state if no tasks are in the queue. 
+    // Yields the executor thread if no tasks are in the queue. 
     // Otherwise, enables the interrupts.
     fn sleep_if_idle(&self) {
-        use x86_64::instructions::interrupts::{self, enable_and_hlt};
-
-        interrupts::disable();
-        if self.task_queue.is_empty() {
-            enable_and_hlt();
-        } else {
-            interrupts::enable();
+        unsafe {
+            let iflag = irq_save();
+            if self.task_queue.is_empty() {
+                glue_yield();
+            }
+            irq_restore(iflag);
         }
     }
+
+
 }
 
 // Struct representing a TaskWaker, which includes a task_id and a reference to the task_queue.
