@@ -2,6 +2,7 @@
 #include <nautilus/cpu_state.h>
 #include <nautilus/vc.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/thread.h>
 
 // parport
 
@@ -35,4 +36,17 @@ uint8_t spin_lock_irq(spinlock_t *lock) {
 
 void spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
   spin_unlock_irq_restore(lock, flags);
+}
+
+
+uint8_t irq_save(void) {
+    return irq_disable_save();
+}
+
+void irq_restore(uint8_t iflag) {
+    irq_enable_restore(iflag);
+}
+
+void glue_yield() {
+    nk_yield();
 }
