@@ -20,6 +20,10 @@ pub struct NkCharDev {
     name: String,
 }
 
+// TODO: add a SAFETY comment similar to `irq::InternalRegistration` when
+// we make a chardev registration API.
+unsafe impl Send for NkCharDev {}
+
 impl NkCharDev {
     pub fn get_name(&self) -> String {
         self.name.to_owned()

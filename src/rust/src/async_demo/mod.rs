@@ -45,7 +45,7 @@ async fn example_task_3() {
     vc_println!("async number 3: {}", number);
 }
 
-register_shell_command!("rust_async", "rust_async", |_, _| {
+register_shell_command!("rust_async", "rust_async", |_| {
     debug!("Entered Rust Async code.");
     kernel_main();
     debug!("Exiting Rust Async code.");

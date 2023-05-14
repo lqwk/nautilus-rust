@@ -10,10 +10,28 @@ use crate::kernel::{
 };
 
 struct InternalRegistration<T> {
-    irq: u16,
+    int_vec: u16,
     data: *mut c_void,
     _p: PhantomData<Arc<T>>,
 }
+
+// SAFETY: `data` is a raw pointer with no thread affinity. The C
+// interrupt handler using `data` does not modify data or move
+// it's referrent. We only store `data` in an `InternalRegistration`
+// so that we can later reclaim the memory it points to. So it is
+// safe to send an `InternalRegistration` between threads. `Send`
+// is important to implement here so that, if some type `T` contains
+// an `irq::Registration`, then `Mutex<NkIrqLock, T>` (from `lock_api`)
+// implements `Sync` and `Send`.
+//
+// Rust-for-Linux's analogous `InternalRegistration` is not `Send`
+// (which confuses me because their spinlocks can't be `Send` and
+// `Sync` if they guard something containing an IRQ registration as
+// mentioned above). In short, I am not 100% confident that this
+// `impl` is truly safe, and if you are noticing odd behavior with
+// interrupts (e.g. data races), then you may want to consider the
+// implications of this line.
+unsafe impl<T> Send for InternalRegistration<T> {}
 
 impl<T> InternalRegistration<T> {
     /// Registers a new irq handler.
@@ -40,7 +58,7 @@ impl<T> InternalRegistration<T> {
 
                 debug!("Successfully registered IRQ {irq}.");
                 Ok(Self {
-                    irq,
+                    int_vec: irq,
                     data: ptr,
                     _p: PhantomData,
                 })
@@ -57,11 +75,11 @@ impl<T> InternalRegistration<T> {
 
 impl<T> Drop for InternalRegistration<T> {
     fn drop(&mut self) {
-        debug!("Dropping a registration for IRQ {}.", self.irq);
+        debug!("Dropping a registration for IRQ {}.", self.int_vec);
 
         // SAFETY: When `try_new` succeeds, the irq was successfully unmasked,
         // so it is ok to mask it here.
-        unsafe { bindings::nk_mask_irq(self.irq as u8); }
+        unsafe { bindings::nk_mask_irq(self.int_vec as u8); }
 
         // SAFETY: This matches the call to `into_raw` from `try_new` in the success case.
         unsafe { Arc::from_raw(self.data); }
@@ -71,10 +89,10 @@ impl<T> Drop for InternalRegistration<T> {
 /// An irq handler.
 pub trait Handler {
     /// The context data associated with and made available to the handler.
-    type State;
+    type State: Send + Sync;
 
     /// Called from interrupt context when the irq happens.
-    fn handle_irq(data: &Self::State) -> c_int;
+    fn handle_irq(data: &Self::State) -> Result;
 }
 
 pub struct Registration<H: Handler>(InternalRegistration<H::State>);
@@ -99,7 +117,7 @@ impl<H: Handler> Registration<H> {
         // SAFETY: On registration, `into_raw` was called, so it is safe to borrow from it here
         // because `from_raw` is called only after the irq is unregistered.
         let state = unsafe { (raw_state as *const H::State).as_ref() }.unwrap();
-        let ret = H::handle_irq(state);
+        let ret = H::handle_irq(state).as_error_code();
 
         // SAFETY: `handler` runs in an interrupt context. `H::handle_irq` has terminated
         // at this point, so it is safe to signal an end-of-interrupt.

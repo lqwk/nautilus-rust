@@ -23,8 +23,13 @@ macro_rules! register_shell_command {
         // Rust macros can't create new identifiers programatically as easily
         // as C can. We use paste to do this.
         paste::paste! {
-            extern "C" fn [<handle_ $cmd>](buf: *mut i8, priv_: *mut core::ffi::c_void) -> i32 {
-                $handler(buf, priv_)
+            extern "C" fn [<handle_ $cmd>](buf: *mut i8, _priv: *mut core::ffi::c_void) -> i32 {
+                // SAFETY: The C code invoking this handler will ensure that `buf` points
+                // to a valid null-terminated C char*. If this condition is violated, it
+                // is a bug in Nautilus' shell and not our fault.
+                let command = unsafe { core::ffi::CStr::from_ptr(buf) };
+
+                $handler(command.to_str().expect("Shell command string is not valid UTF-8."))
             }
 
             // Nautilus shell commands are registered by placing a pointer in the

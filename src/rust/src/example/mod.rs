@@ -15,7 +15,7 @@ fn example(a: i32, b: i32) -> i32 {
     a + b
 }
 
-register_shell_command!("rust", "rust", |_, _| {
+register_shell_command!("rust", "rust", |_| {
     debug!("Entered Rust code.");
     example(8, 1);
     debug!("Exiting Rust code.");

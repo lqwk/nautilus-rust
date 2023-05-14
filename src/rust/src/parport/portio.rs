@@ -10,7 +10,7 @@ pub struct ParportIO {
 }
 
 impl ParportIO {
-    pub unsafe fn new(base_port: u16) -> Self {
+    pub fn new(base_port: u16) -> Self {
         Self {
             data_port: base_port,
             stat_port: base_port + 1,

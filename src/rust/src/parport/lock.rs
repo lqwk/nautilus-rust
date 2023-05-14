@@ -26,6 +26,10 @@ impl NkIrqLock {
     }
 }
 
+// SAFETY: Nautilus' spinlock is thread-safe.
+unsafe impl Send for NkIrqLock {}
+unsafe impl Sync for NkIrqLock {}
+
 unsafe impl RawMutex for NkIrqLock {
     #[allow(clippy::declare_interior_mutable_const)]
     const INIT: NkIrqLock = NkIrqLock::new();
@@ -34,10 +38,11 @@ unsafe impl RawMutex for NkIrqLock {
 
     fn lock(&self) {
         let lock_ptr = self.spinlock.get();
-        unsafe {
-            // thread safety guaranteed by the lock itself
-            *self.state_flags.get() = spin_lock_irq(lock_ptr);
-        }
+
+        // SAFETY: Both the pointer to `state_flags` and `lock_ptr`
+        // are valid pointers, as they just came from UnsafeCell::get.
+        // Thread-safety is guaranteed by the lock itself.
+        unsafe { *self.state_flags.get() = spin_lock_irq(lock_ptr); }
     }
 
     fn try_lock(&self) -> bool {
@@ -46,9 +51,10 @@ unsafe impl RawMutex for NkIrqLock {
 
     unsafe fn unlock(&self) {
         let lock_ptr = self.spinlock.get();
-        unsafe {
-            // thread safety guaranteed by the lock itself
-            spin_unlock_irq(lock_ptr, *self.state_flags.get());
-        }
+
+        // SAFETY: Both the pointer to `state_flags` and `lock_ptr`
+        // are valid pointers, as they just came from UnsafeCell::get.
+        // Thread-safety is guaranteed by the lock itself.
+        unsafe { spin_unlock_irq(lock_ptr, *self.state_flags.get()); }
     }
 }
