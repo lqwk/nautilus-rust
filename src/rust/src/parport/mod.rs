@@ -1,7 +1,7 @@
 use bitfield::bitfield;
 use core::ffi::c_int;
 use crate::prelude::*;
-use chardev::{NkCharDev,CharDevOps};
+use chardev::NkCharDev;
 use portio::ParportIO;
 
 use self::{lock::IRQLock, portio::io_delay};
@@ -48,7 +48,7 @@ enum ParportStatus {
 }
 
 pub struct Parport {
-    dev: NkCharDev<Parport>,
+    dev: NkCharDev,
     port: ParportIO,
     irq: Option<irq::Registration<Parport>>,
     state: ParportStatus,
@@ -65,74 +65,8 @@ impl irq::Handler for Parport {
     }
 }
 
-impl CharDevOps for Parport {
-    fn is_ready(&mut self) -> bool {
-        self.state == ParportStatus::Ready
-    }
-
-    fn read(&mut self) -> Result<u8> {
-        if !self.is_ready() {
-            debug!("Unable to read while device is busy.");
-            return Err(-1);
-        }
-        self.state = ParportStatus::Busy;
-
-        // mark device as busy
-        debug!("setting device as busy");
-        let mut stat = self.port.read_stat();
-        stat.set_busy(false); // stat.busy = 0
-        self.port.write_stat(&stat);
-
-        self.wait_for_attached_device();
-
-        // disable output drivers for reading so no fire happens
-        let mut ctrl = self.port.read_ctrl();
-        ctrl.set_bidir_en(true); // active low to enable output
-        self.port.write_ctrl(&ctrl);
-
-        Ok(self.port.read_data().data)
-    }
-
-    fn write(&mut self, data: u8) -> Result {
-        if !self.is_ready() {
-            debug!("Unable to write while device is busy.");
-            return Err(-1);
-        }
-        self.state = ParportStatus::Busy;
-
-        // mark device as busy
-        debug!("setting device as busy");
-        let mut stat = self.port.read_stat();
-        stat.set_busy(false); // stat.busy = 0
-        self.port.write_stat(&stat);
-
-        self.wait_for_attached_device();
-
-        // set device to output mode
-        debug!("setting device to output mode");
-        let mut ctrl = self.port.read_ctrl();
-        ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
-        self.port.write_ctrl(&ctrl);
-
-        // write data byte to data register
-        debug!("writing data to device");
-        self.port.write_data(&DataReg { data });
-
-        // strobe the attached printer
-        debug!("strobing device");
-        ctrl.set_strobe(false); // ctrl.strobe = 0
-        self.port.write_ctrl(&ctrl);
-        ctrl.set_strobe(true); // ctrl.strobe = 1
-        self.port.write_ctrl(&ctrl);
-        ctrl.set_strobe(false); // ctrl.strobe = 0
-        self.port.write_ctrl(&ctrl);
-
-        Ok(())
-    }
-}
-
 impl Parport {
-    pub fn new(dev: NkCharDev<Parport>, port: ParportIO, irq: u16) -> Result<Arc<IRQLock<Parport>>> {
+    pub fn new(dev: NkCharDev, port: ParportIO, irq: u16) -> Result<Arc<IRQLock<Parport>>> {
         let parport = Arc::new(IRQLock::new(Parport {
             dev,
             port,
@@ -177,15 +111,73 @@ impl Parport {
         }
     }
 
-    
+    pub fn write(&mut self, data: u8) -> Result {
+        if !self.is_ready() {
+            debug!("Unable to write while device is busy.");
+            return Err(-1);
+        }
+        self.state = ParportStatus::Busy;
 
-    
+        // mark device as busy
+        debug!("setting device as busy");
+        let mut stat = self.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        self.port.write_stat(&stat);
+
+        self.wait_for_attached_device();
+
+        // set device to output mode
+        debug!("setting device to output mode");
+        let mut ctrl = self.port.read_ctrl();
+        ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
+        self.port.write_ctrl(&ctrl);
+
+        // write data byte to data register
+        debug!("writing data to device");
+        self.port.write_data(&DataReg { data });
+
+        // strobe the attached printer
+        debug!("strobing device");
+        ctrl.set_strobe(false); // ctrl.strobe = 0
+        self.port.write_ctrl(&ctrl);
+        ctrl.set_strobe(true); // ctrl.strobe = 1
+        self.port.write_ctrl(&ctrl);
+        ctrl.set_strobe(false); // ctrl.strobe = 0
+        self.port.write_ctrl(&ctrl);
+
+        Ok(())
+    }
+
+    fn read(&mut self) -> Result<u8> {
+        if !self.is_ready() {
+            debug!("Unable to read while device is busy.");
+            return Err(-1);
+        }
+        self.state = ParportStatus::Busy;
+
+        // mark device as busy
+        debug!("setting device as busy");
+        let mut stat = self.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        self.port.write_stat(&stat);
+
+        self.wait_for_attached_device();
+
+        // disable output drivers for reading so no fire happens
+        let mut ctrl = self.port.read_ctrl();
+        ctrl.set_bidir_en(true); // active low to enable output
+        self.port.write_ctrl(&ctrl);
+
+        Ok(self.port.read_data().data)
+    }
 
     fn get_name(&self) -> String {
         self.dev.get_name()
     }
 
-    
+    fn is_ready(&mut self) -> bool {
+        self.state == ParportStatus::Ready
+    }
 
     fn set_ready(&mut self) {
         self.state = ParportStatus::Ready;
