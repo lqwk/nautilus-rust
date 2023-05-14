@@ -20,3 +20,7 @@ bitfield = "0.14.0"
 x86_64 = "0.14.10"
 lock_api = "0.4.9"
 paste = "1.0.12"
+
+[dependencies.lazy_static]
+version = "1.4.0"
+features = ["spin_no_std"]
