@@ -1158,6 +1158,12 @@ user: FORCE
 		all
 
 
+PHONY += ramdisk.img
+ramdisk.img: FORCE
+	@make -C tools/mklfs
+	@echo "Building Root Filesystem..."
+	@tools/mklfs/mklfs -c root -b 512 -r 512 -p 512 -s 1048576 -i $@
+
 
 PHONY += FORCE
 FORCE:

@@ -594,6 +594,19 @@ handle_attach (char * buf, void * priv)
             return 0;
         }
 #endif
+    } else if (!strcmp(type,"lfs")) { 
+#ifndef NAUT_CONFIG_LITTLEFS_FILESYSTEM_DRIVER 
+        nk_vc_printf("Not compiled with LITTLEFS support, cannot attach\n");
+        return -1;
+#else
+        if (nk_fs_lfs_attach(devname,fsname,0)) {
+            nk_vc_printf("Failed to attach %s as lfs volume with name %s\n", devname,fsname);
+            return -1;
+        } else {
+            nk_vc_printf("Device %s attached as lfs volume with name %s\n", devname,fsname);
+            return 0;
+        }
+#endif
     } else {
         nk_vc_printf("FS type %s is not supported\n", type);
         return -1;
@@ -771,6 +784,8 @@ handle_cat (char * buf, void * priv)
             nk_vc_printf("%c",data[i]);
         }
     } while (ct>0);
+
+    nk_fs_close(fd);
 
     return 0;
 }
