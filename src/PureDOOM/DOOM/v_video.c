@@ -241,18 +241,6 @@ void V_DrawPatch(int x, int y, int scrn, patch_t* patch)
             }
             column = (column_t*)((byte*)column + column->length
                                  + 4);
-            // TODO: some compiler flags seem to be yeeting `column`
-            // way over the stack.
-            //
-            // A "fix" is to detect this and stop blindly reading
-            // random memory.
-            if ((unsigned long)column < 0x7ec50000) {
-                doom_print("WTF FROM VIDEO ON LOWER BOUND\n");
-                return;
-            } else if ((unsigned long)column > 0x7fffc800) {
-                doom_print("WTF FROM VIDEO ON UPPER BOUND\n");
-                return;
-            }
         }
     }
 }

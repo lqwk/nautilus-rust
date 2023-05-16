@@ -650,17 +650,20 @@ void IdentifyVersion(void)
     }
 
     void* f;
-    // if (f = doom_open(doom2fwad, "rb"))
-    // {
-    //     doom_close(f);
-    //     gamemode = commercial;
-    //     // C'est ridicule!
-    //     // Let's handle languages in config files, okay?
-    //     language = french;
-    //     doom_print("French version\n");
-    //     D_AddFile(doom2fwad);
-    //     return;
-    // }
+    doom_print("here\n");
+    if (f = doom_open(doom2fwad, "rb"))
+    {
+        doom_print("there\n");
+        doom_close(f);
+        doom_print("there again\n");
+        gamemode = commercial;
+        // C'est ridicule!
+        // Let's handle languages in config files, okay?
+        language = french;
+        doom_print("French version\n");
+        D_AddFile(doom2fwad);
+        return;
+    }
 
     if (f = doom_open(doom2wad, "rb"))
     {
@@ -670,45 +673,45 @@ void IdentifyVersion(void)
         return;
     }
 
-    /*if (f = doom_open(plutoniawad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = commercial;*/
-        /*D_AddFile(plutoniawad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(plutoniawad, "rb"))
+    {
+        doom_close(f);
+        gamemode = commercial;
+        D_AddFile(plutoniawad);
+        return;
+    }
 
-    /*if (f = doom_open(tntwad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = commercial;*/
-        /*D_AddFile(tntwad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(tntwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = commercial;
+        D_AddFile(tntwad);
+        return;
+    }
 
-    /*if (f = doom_open(doomuwad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = retail;*/
-        /*D_AddFile(doomuwad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(doomuwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = retail;
+        D_AddFile(doomuwad);
+        return;
+    }
 
-    /*if (f = doom_open(doomwad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = registered;*/
-        /*D_AddFile(doomwad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(doomwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = registered;
+        D_AddFile(doomwad);
+        return;
+    }
 
-    /*if (f = doom_open(doom1wad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = shareware;*/
-        /*D_AddFile(doom1wad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(doom1wad, "rb"))
+    {
+        doom_close(f);
+        gamemode = shareware;
+        D_AddFile(doom1wad);
+        return;
+    }
 
     doom_print("Game mode indeterminate.\n");
     gamemode = indetermined;
