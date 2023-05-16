@@ -889,7 +889,7 @@ depend dep:
 # Directories & files removed with 'make clean'
 CLEAN_DIRS  += $(MODVERDIR)
 CLEAN_FILES +=	 nautilus.asm $(SYM_NAME) $(SEC_NAME) $(ISO_NAME) $(BIN_NAME) \
-                 .tmp_version .tmp_nautilus*
+                 .tmp_version .tmp_nautilus* ramdisk.img
 
 # Directories & files removed with 'make mrproper'
 MRPROPER_DIRS  += include/config 
@@ -1162,7 +1162,7 @@ PHONY += ramdisk.img
 ramdisk.img: FORCE
 	@make -C tools/mklfs
 	@echo "Building Root Filesystem..."
-	@tools/mklfs/mklfs -c root -b 512 -r 512 -p 512 -s 1048576 -i $@
+	@tools/mklfs/mklfs -c root -b 512 -r 512 -p 512 -s 29360128 -i $@
 
 
 PHONY += FORCE

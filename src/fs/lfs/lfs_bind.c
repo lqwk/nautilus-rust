@@ -241,7 +241,7 @@ int lfs_blk_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off,
                  void *buffer, lfs_size_t size) {
   struct lfs_state *s = (struct lfs_state *)c->context;
 
-  INFO("read block %d, off:%zu, size:%zu\n", block, off, size);
+  DEBUG("read block %d, off:%zu, size:%zu\n", block, off, size);
 
   // memset(buffer, 0, size);
   int err = nk_block_dev_read(s->dev, block, 1, buffer, NK_DEV_REQ_BLOCKING,
