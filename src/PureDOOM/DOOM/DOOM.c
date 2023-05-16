@@ -616,11 +616,9 @@ void doom_update()
     while (delta_time-- > 0)
     {
         if (is_wiping_screen) {
-            doom_print("Wiping screen\n");
             D_UpdateWipe();
         }
         else {
-            doom_print("Doom Loop\n");
             D_DoomLoop();
         }
     }

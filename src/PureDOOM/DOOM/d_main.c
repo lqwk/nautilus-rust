@@ -24,11 +24,6 @@
 //
 //-----------------------------------------------------------------------------
 
-#include <nautilus/nautilus.h>
-#include <nautilus/fs.h>
-#undef true
-#undef false
-
 #include "doom_config.h"
 
 #if defined(DOOM_WIN32)
@@ -377,10 +372,8 @@ void D_DoomLoop(void)
 
         S_UpdateSounds(players[consoleplayer].mo);// move positional sounds
 
-        doom_print("Going to display\n");
         // Update display, next frame, with current state.
         D_Display();
-        doom_print("Displayed\n");
 
 #if 0 // [pd] Sound is queried by the application's audio thread.
         // Sound mixing for the buffer is snychronous.
@@ -650,12 +643,9 @@ void IdentifyVersion(void)
     }
 
     void* f;
-    doom_print("here\n");
     if (f = doom_open(doom2fwad, "rb"))
     {
-        doom_print("there\n");
         doom_close(f);
-        doom_print("there again\n");
         gamemode = commercial;
         // C'est ridicule!
         // Let's handle languages in config files, okay?
