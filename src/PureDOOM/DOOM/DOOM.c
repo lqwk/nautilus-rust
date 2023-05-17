@@ -122,15 +122,22 @@ int doom_eof_impl(void* handle)
 #else
 void* doom_open_impl(const char* filename, const char* mode)
 {
+    nk_fs_fd_t fd;
     if (mode[0] == 'r' && mode[1] == 'w' && mode[2] == '\0') {
-        return nk_fs_open(filename, O_RDWR, 0);
+        fd = nk_fs_open(filename, O_RDWR, 0);
     } else if (mode[0] == 'r' && mode[1] == 'b' && mode[2] == '\0') {
-        return nk_fs_open(filename, O_RDONLY, 0);
+        fd = nk_fs_open(filename, O_RDONLY, 0);
     }  else if (mode[0] == 'r' && mode[1] == '\0') {
-        return nk_fs_open(filename, O_RDONLY, 0);
+        fd = nk_fs_open(filename, O_RDONLY, 0);
     } else {
         ERROR_PRINT("unknown mode in doom_open: %s\n", mode);
         return NULL;
+    }
+
+    if (fd == FS_BAD_FD) {
+        return NULL;
+    } else {
+        return fd;
     }
 }
 void doom_close_impl(void* handle) {
@@ -609,11 +616,9 @@ void doom_update()
     while (delta_time-- > 0)
     {
         if (is_wiping_screen) {
-            doom_print("Wiping screen\n");
             D_UpdateWipe();
         }
         else {
-            doom_print("Doom Loop\n");
             D_DoomLoop();
         }
     }

@@ -1,6 +1,8 @@
 #include <nautilus/nautilus.h>
+#include <nautilus/thread.h>
 #include <nautilus/dev.h>
 #include <nautilus/gpudev.h>
+#include <nautilus/fs.h>
 #include <nautilus/timer.h>
 #include <nautilus/shell.h>
 #include <nautilus/libccompat.h>
@@ -14,37 +16,79 @@
 
 #define MAX_MODES 64
 
-#define PRINT_MODE(spec, count, m)					\
-    nk_vc_printf(spec "mode %d: %s %u by %u, offsets %u %u %u %u, flags 0x%lx, mouse %u by %u\n", \
-		 (count),						\
-		 (m)->type==NK_GPU_DEV_MODE_TYPE_TEXT ? "text" :		\
-		 (m)->type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D ? "graphics (2d)" : "UNKNOWN", \
-		 (m)->width, (m)->height,					\
-		 (m)->channel_offset[0], (m)->channel_offset[1], (m)->channel_offset[2], (m)->channel_offset[3], \
-		 (m)->flags,						\
-		 (m)->mouse_cursor_width, (m)->mouse_cursor_height)
+static const nk_keycode_t NoShiftNoCaps[] = {
+    KEY_UNKNOWN, ASCII_ESC, '1', '2',   /* 0x00 - 0x03 */
+    '3', '4', '5', '6',                 /* 0x04 - 0x07 */
+    '7', '8', '9', '0',                 /* 0x08 - 0x0B */
+    '-', '=', ASCII_BS, '\t',           /* 0x0C - 0x0F */
+    'q', 'w', 'e', 'r',                 /* 0x10 - 0x13 */
+    't', 'y', 'u', 'i',                 /* 0x14 - 0x17 */
+    'o', 'p', '[', ']',                 /* 0x18 - 0x1B */
+    '\r', KEY_LCTRL, 'a', 's',          /* 0x1C - 0x1F */
+    'd', 'f', 'g', 'h',                 /* 0x20 - 0x23 */
+    'j', 'k', 'l', ';',                 /* 0x24 - 0x27 */
+    '\'', '`', KEY_LSHIFT, '\\',        /* 0x28 - 0x2B */
+    'z', 'x', 'c', 'v',                 /* 0x2C - 0x2F */
+    'b', 'n', 'm', ',',                 /* 0x30 - 0x33 */
+    '.', '/', KEY_RSHIFT, KEY_PRINTSCRN, /* 0x34 - 0x37 */
+    KEY_LALT, ' ', KEY_CAPSLOCK, KEY_F1, /* 0x38 - 0x3B */
+    KEY_F2, KEY_F3, KEY_F4, KEY_F5,     /* 0x3C - 0x3F */
+    KEY_F6, KEY_F7, KEY_F8, KEY_F9,     /* 0x40 - 0x43 */
+    KEY_F10, KEY_NUMLOCK, KEY_SCRLOCK, KEY_KPHOME,  /* 0x44 - 0x47 */
+    KEY_KPUP, KEY_KPPGUP, KEY_KPMINUS, KEY_KPLEFT,  /* 0x48 - 0x4B */
+    KEY_KPCENTER, KEY_KPRIGHT, KEY_KPPLUS, KEY_KPEND,  /* 0x4C - 0x4F */
+    KEY_KPDOWN, KEY_KPPGDN, KEY_KPINSERT, KEY_KPDEL,  /* 0x50 - 0x53 */
+    KEY_SYSREQ, KEY_UNKNOWN, KEY_UNKNOWN, KEY_UNKNOWN,  /* 0x54 - 0x57 */
+};
 
-// Helper macro for checking the result of a call
-#define CHECK(x) if (x) { nk_gpu_dev_set_mode(d,&prevmode); nk_vc_printf("failed to do " #x "\n"); return -1; }
+#define KB_KEY_RELEASE 0x80
+nk_keycode_t simple_kbd_translate(nk_scancode_t scan, int* out)
+{
+  int release;
+  const nk_keycode_t *table=0;
+  nk_keycode_t cur;
+  nk_keycode_t flag;
+  
+
+  release = scan & KB_KEY_RELEASE;
+  scan &= ~KB_KEY_RELEASE;
+
+  table = NoShiftNoCaps;
+  
+  cur = table[scan];
+  *out = release;
+  return cur;
+}
+
+void scancode_handler(nk_scancode_t scan, void *priv) {
+    int release;
+    nk_keycode_t key = simple_kbd_translate(scan, &release);
+    if (release == 0) {
+        doom_key_down(key);
+    } else {
+        doom_key_up(key);
+    }
+}
+
+void input_handler() {
+    struct nk_vc_ops ops;
+    ops.raw_noqueue = scancode_handler;
+    struct nk_virtual_console* vc = nk_create_vc("doom", RAW_NOQUEUE, 0x0f, &ops, 0);
+    nk_switch_to_vc(vc);
+
+    while (true);
+}
 
 int run_doom(struct nk_gpu_dev* d, nk_gpu_dev_box_t* box) {
-    /*DEBUG("calling doom_init ...\n");*/
     doom_init(0, NULL, 0);
-    nk_gpu_dev_bitmap_t* bitmap = malloc (sizeof (nk_gpu_dev_bitmap_t) + 4 * SCREENWIDTH * SCREENHEIGHT);
+    nk_gpu_dev_bitmap_t* bitmap = malloc(sizeof(nk_gpu_dev_bitmap_t) + 4 * SCREENWIDTH * SCREENHEIGHT);
     bitmap->width = SCREENWIDTH;
     bitmap->height = SCREENHEIGHT;
     while (true) {
-        /*DEBUG("calling doom_update ...\n");*/
         doom_update();
-        /*DEBUG("getting the framebuffer\n");*/
         uint8_t* framebuffer = doom_get_framebuffer(4 /* RGBA */);
-        /*for (int i = 0; i < 4 * SCREENWIDTH * SCREENHEIGHT; i++) {*/
-            /*DEBUG("%u\n", framebuffer[i]);*/
-        /*}*/
         memcpy(bitmap->pixels, framebuffer, 4 * SCREENWIDTH * SCREENHEIGHT);
-        /*DEBUG("filling box with bitmap\n");*/
         nk_gpu_dev_graphics_fill_box_with_bitmap(d, box, bitmap, NK_GPU_DEV_BIT_BLIT_OP_COPY);
-        /*DEBUG("flushing the screen\n");*/
         nk_gpu_dev_flush(d);
     }
 
@@ -53,34 +97,24 @@ int run_doom(struct nk_gpu_dev* d, nk_gpu_dev_box_t* box) {
     return 0;
 }
 
-static int handle_doom (char * buf, void * priv)
-{
-    /*doom_init(0, NULL, 0);*/
-    /*while(true) {*/
-        /*doom_update();*/
-    /*}*/
-    char name[32];
+static int handle_doom (char * buf, void * priv) {
+    char* name = "virtio-gpu0";
     struct nk_gpu_dev *d;
     nk_gpu_dev_video_mode_t modes[MAX_MODES], prevmode, *curmode;
     uint32_t nummodes=MAX_MODES;
 
-    if ((sscanf(buf,"doom %s",name)!=1)) { 
-	nk_vc_printf("doom devname\n",buf);
-	return -1;
-    }
-    
+    nk_fs_lfs_attach("virtio-blk0", "rootfs", 0);
+
     if (!(d=nk_gpu_dev_find(name))) { 
         nk_vc_printf("Can't find %s\n",name);
         return -1;
     }
 
     if (nk_gpu_dev_get_mode(d,&prevmode)) {
-	nk_vc_printf("Can't get mode\n");
-	return -1;
+        nk_vc_printf("Can't get mode\n");
+        return -1;
     }
 
-    PRINT_MODE("current ",0,&prevmode);
-    
     if (nk_gpu_dev_get_available_modes(d,modes,&nummodes)) {
         nk_vc_printf("Can't get available modes from %s\n",name);
         return -1;
@@ -88,46 +122,40 @@ static int handle_doom (char * buf, void * priv)
 
     uint32_t i, sel=-1;
     
-    nk_vc_printf("Available modes are:\n");
     for (i=0;i<nummodes;i++) {
-	PRINT_MODE("",i,&modes[i]);
-	if (modes[i].type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D) {
-	    sel = i;
-	}
+        if (modes[i].type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D) {
+            sel = i;
+        }
     }
     if (sel==-1) {
-	nk_vc_printf("No graphics mode available (huh?) !!!!\n");
-	return -1;
-    } else {
-	nk_vc_printf("Using first graphics mode (%u)\n",sel);
+        nk_vc_printf("No graphics mode available (huh?) !!!!\n");
+        return -1;
     }
 
     if (nk_gpu_dev_set_mode(d,&modes[sel])) {
-	nk_vc_printf("Failed to set graphics mode....\n");
-	return -1;
+        nk_vc_printf("Failed to set graphics mode....\n");
+        return -1;
     }
 
     curmode = &modes[sel];
-
-    // assume that clipping (if available) is set to whole screen
-
-
-    // Add your own test code here. You can remove this default test code we wrote
-    //
-    // WRITE ME!
-
-    //*** start of existing test ***
-
-    // clip small border around screen
     nk_gpu_dev_box_t clipping_box = {.x = (curmode->width - SCREENWIDTH) / 2,
                                      .y = (curmode->height - SCREENHEIGHT) / 2,
                                      .width = SCREENWIDTH,
                                      .height = SCREENHEIGHT};
     nk_gpu_dev_graphics_set_clipping_box(d, &clipping_box);
 
-    // flush the initial display
-    CHECK(nk_gpu_dev_flush(d));
-    nk_vc_printf("Initial flush of the screen\n");
+    // Change default bindings to modern mapping
+    doom_set_default_int("key_up",          DOOM_KEY_W);
+    doom_set_default_int("key_down",        DOOM_KEY_S);
+    doom_set_default_int("key_strafeleft",  DOOM_KEY_A);
+    doom_set_default_int("key_straferight", DOOM_KEY_D);
+    doom_set_default_int("key_use",         DOOM_KEY_E);
+    doom_set_default_int("key_left",        DOOM_KEY_H);
+    doom_set_default_int("key_right",       DOOM_KEY_L);
+    doom_set_default_int("key_fire",        DOOM_KEY_SPACE);
+    doom_set_default_int("mouse_move",      0); // Mouse will not move forward
+
+    nk_thread_start(input_handler, NULL, NULL, 1, TSTACK_DEFAULT, 0, 1);
     run_doom(d, &clipping_box);
 
     return 0;
@@ -136,7 +164,7 @@ static int handle_doom (char * buf, void * priv)
 
 static struct shell_cmd_impl doom_impl = {
     .cmd      = "doom",
-    .help_str = "doom dev",
+    .help_str = "doom",
     .handler  = handle_doom,
 };
 nk_register_shell_cmd(doom_impl);

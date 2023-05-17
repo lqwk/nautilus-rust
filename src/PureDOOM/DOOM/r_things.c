@@ -407,18 +407,6 @@ void R_DrawMaskedColumn(column_t* column)
             colfunc();
         }
         column = (column_t*)((byte*)column + column->length + 4);
-        // TODO: some compiler flags seem to be yeeting `column`
-        // way over the stack.
-        //
-        // A "fix" is to detect this and stop blindly reading
-        // random memory.
-        if ((unsigned long)column < 0x7e000000) {
-            doom_print("WTF FROM THINGS ON LOWER BOUND\n");
-            return;
-        } else if ((unsigned long)column > 0x7fffffff) {
-            doom_print("WTF FROM THINGS ON UPPER BOUND\n");
-            return;
-        }
     }
 
     dc_texturemid = basetexturemid;

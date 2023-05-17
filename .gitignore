@@ -27,3 +27,5 @@ parport.out
 # clangd stuff
 /compile_commands.json
 /.cache
+
+/root

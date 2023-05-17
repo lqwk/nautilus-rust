@@ -172,7 +172,7 @@ menu "Build"
     config DOOM_ENGINE
       bool "Build the DOOM engine"
       default n
-      depends on HPET && VIRTIO_GPU && FAT32_FILESYSTEM_DRIVER
+      depends on HPET && VIRTIO_GPU && LITTLEFS_FILESYSTEM_DRIVER
       help
         Builds a Nautilus-compatible DOOM engine. Play DOOM, DOOM II, etc.,
         from the shell.

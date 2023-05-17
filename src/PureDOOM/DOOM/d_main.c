@@ -24,11 +24,6 @@
 //
 //-----------------------------------------------------------------------------
 
-#include <nautilus/nautilus.h>
-#include <nautilus/fs.h>
-#undef true
-#undef false
-
 #include "doom_config.h"
 
 #if defined(DOOM_WIN32)
@@ -377,10 +372,8 @@ void D_DoomLoop(void)
 
         S_UpdateSounds(players[consoleplayer].mo);// move positional sounds
 
-        doom_print("Going to display\n");
         // Update display, next frame, with current state.
         D_Display();
-        doom_print("Displayed\n");
 
 #if 0 // [pd] Sound is queried by the application's audio thread.
         // Sound mixing for the buffer is snychronous.
@@ -650,17 +643,17 @@ void IdentifyVersion(void)
     }
 
     void* f;
-    // if (f = doom_open(doom2fwad, "rb"))
-    // {
-    //     doom_close(f);
-    //     gamemode = commercial;
-    //     // C'est ridicule!
-    //     // Let's handle languages in config files, okay?
-    //     language = french;
-    //     doom_print("French version\n");
-    //     D_AddFile(doom2fwad);
-    //     return;
-    // }
+    if (f = doom_open(doom2fwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = commercial;
+        // C'est ridicule!
+        // Let's handle languages in config files, okay?
+        language = french;
+        doom_print("French version\n");
+        D_AddFile(doom2fwad);
+        return;
+    }
 
     if (f = doom_open(doom2wad, "rb"))
     {
@@ -670,45 +663,45 @@ void IdentifyVersion(void)
         return;
     }
 
-    /*if (f = doom_open(plutoniawad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = commercial;*/
-        /*D_AddFile(plutoniawad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(plutoniawad, "rb"))
+    {
+        doom_close(f);
+        gamemode = commercial;
+        D_AddFile(plutoniawad);
+        return;
+    }
 
-    /*if (f = doom_open(tntwad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = commercial;*/
-        /*D_AddFile(tntwad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(tntwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = commercial;
+        D_AddFile(tntwad);
+        return;
+    }
 
-    /*if (f = doom_open(doomuwad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = retail;*/
-        /*D_AddFile(doomuwad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(doomuwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = retail;
+        D_AddFile(doomuwad);
+        return;
+    }
 
-    /*if (f = doom_open(doomwad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = registered;*/
-        /*D_AddFile(doomwad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(doomwad, "rb"))
+    {
+        doom_close(f);
+        gamemode = registered;
+        D_AddFile(doomwad);
+        return;
+    }
 
-    /*if (f = doom_open(doom1wad, "rb"))*/
-    /*{*/
-        /*doom_close(f);*/
-        /*gamemode = shareware;*/
-        /*D_AddFile(doom1wad);*/
-        /*return;*/
-    /*}*/
+    if (f = doom_open(doom1wad, "rb"))
+    {
+        doom_close(f);
+        gamemode = shareware;
+        D_AddFile(doom1wad);
+        return;
+    }
 
     doom_print("Game mode indeterminate.\n");
     gamemode = indetermined;

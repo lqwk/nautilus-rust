@@ -31,6 +31,13 @@ config LITTLEFS_FILESYSTEM_DRIVER
 	default n
 	help
 		Adds LittleFS support
+
+config DEBUG_LITTLEFS_FILESYSTEM_DRIVER
+	bool "Debug LittleFS filesystem"
+	default n
+	depends on DEBUG_PRINTS && LITTLEFS_FILESYSTEM_DRIVER
+        help
+                Turn on debug prints for the LittleFS filesystem
 endmenu
 
     
