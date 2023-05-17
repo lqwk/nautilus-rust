@@ -16,7 +16,6 @@
 
 #define MAX_MODES 64
 
-// Change default bindings to modern mapping
 static const nk_keycode_t NoShiftNoCaps[] = {
     KEY_UNKNOWN, ASCII_ESC, '1', '2',   /* 0x00 - 0x03 */
     '3', '4', '5', '6',                 /* 0x04 - 0x07 */
@@ -43,7 +42,7 @@ static const nk_keycode_t NoShiftNoCaps[] = {
 };
 
 #define KB_KEY_RELEASE 0x80
-nk_keycode_t kbd_translate_patch(nk_scancode_t scan, int* out)
+nk_keycode_t simple_kbd_translate(nk_scancode_t scan, int* out)
 {
   int release;
   const nk_keycode_t *table=0;
@@ -51,7 +50,6 @@ nk_keycode_t kbd_translate_patch(nk_scancode_t scan, int* out)
   nk_keycode_t flag;
   
 
-  // update the flags
   release = scan & KB_KEY_RELEASE;
   scan &= ~KB_KEY_RELEASE;
 
@@ -63,10 +61,8 @@ nk_keycode_t kbd_translate_patch(nk_scancode_t scan, int* out)
 }
 
 void scancode_handler(nk_scancode_t scan, void *priv) {
-    DEBUG("GOT A SCANCODE: %x\n", scan);
     int release;
-    nk_keycode_t key = kbd_translate_patch(scan, &release);
-    DEBUG("THE KEYCODE IS: %x. RELEASE IS: %d\n", key, release);
+    nk_keycode_t key = simple_kbd_translate(scan, &release);
     if (release == 0) {
         doom_key_down(key);
     } else {
@@ -75,20 +71,9 @@ void scancode_handler(nk_scancode_t scan, void *priv) {
 }
 
 void input_handler() {
-    // Change default bindings to modern mapping
-    doom_set_default_int("key_up",          DOOM_KEY_W);
-    doom_set_default_int("key_down",        DOOM_KEY_S);
-    doom_set_default_int("key_strafeleft",  DOOM_KEY_A);
-    doom_set_default_int("key_straferight", DOOM_KEY_D);
-    doom_set_default_int("key_use",         DOOM_KEY_E);
-    doom_set_default_int("key_left",        DOOM_KEY_H);
-    doom_set_default_int("key_right",       DOOM_KEY_L);
-    doom_set_default_int("key_fire",        DOOM_KEY_SPACE);
-    doom_set_default_int("mouse_move",      0); // Mouse will not move forward
-
     struct nk_vc_ops ops;
     ops.raw_noqueue = scancode_handler;
-    struct nk_virtual_console* vc = nk_create_vc("default", RAW_NOQUEUE, 0x0f, &ops, 0);
+    struct nk_virtual_console* vc = nk_create_vc("doom", RAW_NOQUEUE, 0x0f, &ops, 0);
     nk_switch_to_vc(vc);
 
     while (true);
@@ -96,7 +81,7 @@ void input_handler() {
 
 int run_doom(struct nk_gpu_dev* d, nk_gpu_dev_box_t* box) {
     doom_init(0, NULL, 0);
-    nk_gpu_dev_bitmap_t* bitmap = malloc (sizeof (nk_gpu_dev_bitmap_t) + 4 * SCREENWIDTH * SCREENHEIGHT);
+    nk_gpu_dev_bitmap_t* bitmap = malloc(sizeof(nk_gpu_dev_bitmap_t) + 4 * SCREENWIDTH * SCREENHEIGHT);
     bitmap->width = SCREENWIDTH;
     bitmap->height = SCREENHEIGHT;
     while (true) {
@@ -113,12 +98,12 @@ int run_doom(struct nk_gpu_dev* d, nk_gpu_dev_box_t* box) {
 }
 
 static int handle_doom (char * buf, void * priv) {
-    nk_fs_lfs_attach("virtio-blk0", "rootfs", 0);
-
     char* name = "virtio-gpu0";
     struct nk_gpu_dev *d;
     nk_gpu_dev_video_mode_t modes[MAX_MODES], prevmode, *curmode;
     uint32_t nummodes=MAX_MODES;
+
+    nk_fs_lfs_attach("virtio-blk0", "rootfs", 0);
 
     if (!(d=nk_gpu_dev_find(name))) { 
         nk_vc_printf("Can't find %s\n",name);
@@ -158,6 +143,17 @@ static int handle_doom (char * buf, void * priv) {
                                      .width = SCREENWIDTH,
                                      .height = SCREENHEIGHT};
     nk_gpu_dev_graphics_set_clipping_box(d, &clipping_box);
+
+    // Change default bindings to modern mapping
+    doom_set_default_int("key_up",          DOOM_KEY_W);
+    doom_set_default_int("key_down",        DOOM_KEY_S);
+    doom_set_default_int("key_strafeleft",  DOOM_KEY_A);
+    doom_set_default_int("key_straferight", DOOM_KEY_D);
+    doom_set_default_int("key_use",         DOOM_KEY_E);
+    doom_set_default_int("key_left",        DOOM_KEY_H);
+    doom_set_default_int("key_right",       DOOM_KEY_L);
+    doom_set_default_int("key_fire",        DOOM_KEY_SPACE);
+    doom_set_default_int("mouse_move",      0); // Mouse will not move forward
 
     nk_thread_start(input_handler, NULL, NULL, 1, TSTACK_DEFAULT, 0, 1);
     run_doom(d, &clipping_box);
