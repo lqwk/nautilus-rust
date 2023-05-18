@@ -3,6 +3,9 @@ use alloc::{collections::BTreeMap, sync::Arc, task::Wake};
 use crossbeam_queue::ArrayQueue;
 use core::task::{Context, Poll, Waker};
 
+use crate::kernel::timer;
+use crate::prelude::*;
+
 extern "C" {
     fn irq_save() -> u8;
     fn irq_restore(flags: u8);
@@ -38,8 +41,14 @@ impl Executor {
 
     // Runs the executor, which continuously executes 
     // tasks if they're ready, and sleeps if idle.
-    pub fn run(&mut self) -> ! {
+    pub fn run(&mut self) {
+        let ns: u64 = 15 * 1_000_000_000;
+        let now = timer::get_realtime();
+        vc_println!("pre-loop");
         loop {
+            if timer::get_realtime() >= now + ns {
+                break;
+            }
             self.run_ready_tasks();
             self.sleep_if_idle();
         }
