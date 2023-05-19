@@ -30,7 +30,7 @@ let task = Task::new(async {
 });
 
 executor.spawn(task);
-executor.run();
+executor.run(true);
 ```
 
 ### Usage with Yielding:
@@ -53,11 +53,13 @@ let task2 = Task::new(async {
 
 executor.spawn(task1);
 executor.spawn(task2);
-executor.run();
+executor.run(true);
 ```
 In this example, `task1` does some work, then yields execution using `yield_now`. The executor then has the opportunity to run other tasks (like `task2` in this case) before `task1` resumes.
 
 Please note that `yield_now` is a cooperative mechanism: a task must choose to call it to yield execution. Tasks that do not call `yield_now` will not yield execution to other tasks, and can monopolize the executor if they run for a long time without completing.
+
+You can set the executor to run forever even if task queue is empty by passing in an argument, for example: `executor.run(false)`.
 
 ## Requirements
 
