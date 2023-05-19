@@ -11,6 +11,7 @@ pub mod print;
 pub mod error;
 pub mod utils;
 pub mod timer;
+pub mod thread;
 
 #[panic_handler]
 pub fn panic(info: &PanicInfo) -> ! {
