@@ -3,9 +3,6 @@ use alloc::{collections::BTreeMap, sync::Arc, task::Wake};
 use crossbeam_queue::ArrayQueue;
 use core::task::{Context, Poll, Waker};
 
-use crate::kernel::timer;
-use crate::prelude::*;
-
 extern "C" {
     fn irq_save() -> u8;
     fn irq_restore(flags: u8);
