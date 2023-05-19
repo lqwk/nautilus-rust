@@ -41,11 +41,11 @@ impl Executor {
 
     // Runs the executor, which continuously executes 
     // tasks if they're ready, and sleeps if idle.
-    pub fn run(&mut self, exit_when_done: bool) {
+    pub fn run(&mut self, exit_when_empty: bool) {
         loop {
             self.run_ready_tasks();
             self.sleep_if_idle();
-            if exit_when_done && self.tasks.is_empty() {
+            if exit_when_empty && self.tasks.is_empty() {
                 break;
             }
         }
