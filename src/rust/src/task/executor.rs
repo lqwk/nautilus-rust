@@ -41,16 +41,13 @@ impl Executor {
 
     // Runs the executor, which continuously executes 
     // tasks if they're ready, and sleeps if idle.
-    pub fn run(&mut self) {
-        let ns: u64 = 15 * 1_000_000_000;
-        let now = timer::get_realtime();
-        vc_println!("pre-loop");
+    pub fn run(&mut self, exit_when_done: bool) {
         loop {
-            if timer::get_realtime() >= now + ns {
-                break;
-            }
             self.run_ready_tasks();
             self.sleep_if_idle();
+            if exit_when_done && self.tasks.is_empty() {
+                break;
+            }
         }
     }
 

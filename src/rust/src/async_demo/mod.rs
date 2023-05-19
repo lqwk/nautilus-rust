@@ -4,12 +4,12 @@ use crate::task::utils::yield_now;
 use crate::kernel::timer;
 
 
-fn kernel_main() -> () {
+fn kernel_main() {
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task_1()));
     executor.spawn(Task::new(example_task_2()));
     executor.spawn(Task::new(example_task_3()));
-    executor.run();
+    executor.run(true); // This will now return once all tasks are done
 }
 
 async fn async_number() -> u32 {
