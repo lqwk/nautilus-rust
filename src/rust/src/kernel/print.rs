@@ -29,16 +29,14 @@ impl fmt::Write for _VcWriter {
 }
 
 /// Prints to the virtual console.
-#[macro_export]
 macro_rules! vc_print {
     ($($arg:tt)*) => ($crate::kernel::print::_print(format_args!($($arg)*)));
 }
 
 /// Prints to the virtual console with an implicit newline.
-#[macro_export]
 macro_rules! vc_println {
     () => ($crate::vc_print!("\n"));
-    ($($arg:tt)*) => ($crate::vc_print!("{}\n", format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::kernel::print::vc_print!("{}\n", format_args!($($arg)*)));
 }
 
 #[doc(hidden)]
@@ -102,7 +100,6 @@ pub fn _log(_args: fmt::Arguments) {
 
 /// Logs a debug message (truncated if excessively long).
 /// This macro is a noop if Rust debug prints are disabled in Kconfig.
-#[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {{
         #[cfg_accessible($crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
@@ -112,7 +109,6 @@ macro_rules! debug {
 }
 
 /// Logs an error message (truncated if excessively long).
-#[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR: {}\n",
@@ -121,8 +117,7 @@ macro_rules! error {
 }
 
 /// Logs a warning message (truncated if excessively long).
-#[macro_export]
-macro_rules! warn {
+macro_rules! _warn {
     ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): WARNING {}\n",
                                     format_args!($($arg)*)));
@@ -130,10 +125,11 @@ macro_rules! warn {
 }
 
 /// Logs an info message (truncated if excessively long).
-#[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): {}\n",
                                     format_args!($($arg)*)));
     }};
 }
+
+pub(crate) use {vc_print, vc_println, error, debug, _warn as warn, info};

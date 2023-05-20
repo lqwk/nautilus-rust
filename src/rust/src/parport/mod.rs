@@ -1,12 +1,10 @@
 use crate::prelude::*;
-use crate::kernel::irq;
+use crate::kernel::{irq, sync::IRQLock, chardev::NkCharDev};
+use self::portio::{ParportIO, io_delay};
 
 use bitfield::bitfield;
 use lazy_static::lazy_static;
-use self::{lock::IRQLock, chardev::NkCharDev, portio::{ParportIO, io_delay}};
 
-mod chardev;
-mod lock;
 mod portio;
 
 const PARPORT0_BASE: u16 = 0x378;
@@ -180,7 +178,7 @@ impl Parport {
         Ok(())
     }
 
-    fn read(&mut self) -> Result<u8> {
+    pub fn read(&mut self) -> Result<u8> {
         if !self.is_ready() {
             debug!("Unable to read while device is busy.");
             return Err(-1);
@@ -207,7 +205,7 @@ impl Parport {
         self.dev.as_ref().map(|dev| dev.get_name())
     }
 
-    fn is_ready(&mut self) -> bool {
+    pub fn is_ready(&mut self) -> bool {
         self.status == ParportStatus::Ready
     }
 
