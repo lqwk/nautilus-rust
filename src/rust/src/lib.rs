@@ -33,6 +33,7 @@ extern crate alloc;
 #[allow(unused_imports)]
 mod prelude;
 #[allow(unused_macros)]
+#[allow(dead_code)]
 mod kernel;
 mod example;
 mod parport;

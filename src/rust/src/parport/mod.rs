@@ -76,23 +76,27 @@ impl irq::Handler for Parport {
     }
 }
 
+// We implement `chardev::Chardev` so that `Parport` can
+// be registered with Nautilus' character device subsytem.
+// We get access to `chardev::Registration::try_new` from
+// this `impl`.
 impl chardev::Chardev for Parport {
     type State = State;
 
-    fn status(parport: &Self::State) -> chardev::StatusReturn {
+    fn status(parport: &Self::State) -> chardev::Status {
         if parport.lock().is_ready() {
-            chardev::StatusReturn::ReadableAndWritable
+            chardev::Status::ReadableAndWritable
         } else {
-            chardev::StatusReturn::NotReady
+            chardev::Status::Busy
         }
     }
 
-    fn read(parport: &Self::State) -> chardev::RwReturn<u8> {
+    fn read(parport: &Self::State) -> chardev::RwResult<u8> {
         debug!("read!");
         let mut parport = parport.lock();
         if !parport.is_ready() {
             debug!("Unable to read while device is busy.");
-            return chardev::RwReturn::WouldBlock;
+            return chardev::RwResult::WouldBlock;
         }
         parport.status = ParportStatus::Busy;
 
@@ -109,16 +113,16 @@ impl chardev::Chardev for Parport {
         ctrl.set_bidir_en(true); // active low to enable output
         parport.port.write_ctrl(&ctrl);
 
-        chardev::RwReturn::Ok(parport.port.read_data().data)
+        chardev::RwResult::Ok(parport.port.read_data().data)
 
     }
 
-    fn write(parport: &Self::State, data: u8) -> chardev::RwReturn {
+    fn write(parport: &Self::State, data: u8) -> chardev::RwResult {
         debug!("write!");
         let mut parport = parport.lock();
         if !parport.is_ready() {
             debug!("Unable to write while device is busy.");
-            return chardev::RwReturn::WouldBlock;
+            return chardev::RwResult::WouldBlock;
         }
         parport.status = ParportStatus::Busy;
 
@@ -149,12 +153,12 @@ impl chardev::Chardev for Parport {
         ctrl.set_strobe(false); // ctrl.strobe = 0
         parport.port.write_ctrl(&ctrl);
 
-        chardev::RwReturn::Ok(())
+        chardev::RwResult::Ok(())
 
     }
 
     fn get_characteristics(_state: &Self::State) -> Result<chardev::Characteristics> {
-        Ok(chardev::Characteristics{})
+        Ok(chardev::Characteristics{/*`Characteristics` currently has no fields*/})
     }
 }
 
@@ -193,6 +197,7 @@ impl Parport {
         parport.lock().irq.take();
     }
 
+    /// Registers the parport with the character device subsytem.
     fn register_chardev(parport: &Arc<State>, name: &str) -> Result {
         // Get rid of the previous registration, if any.
         // This means that registering twice is safe (but useless).
@@ -214,6 +219,7 @@ impl Parport {
         parport.lock().dev.take();
     }
 
+    /// Initializes the parport registers.
     fn init(&mut self) {
         let mut ctrl = CtrlReg(0); // bidir = 0, which means we are in output mode
         ctrl.set_select(true); // attached device selected
@@ -261,6 +267,8 @@ fn bringup_device(name: &str, irq: u8) -> Result {
 
     Parport::register_irq(&PARPORT, irq as u16)?;
     Parport::register_chardev(&PARPORT, name)?;
+
+    vc_println!("Registered device {}.", &PARPORT.lock().dev.as_ref().unwrap().name());
 
     Ok(())
 }

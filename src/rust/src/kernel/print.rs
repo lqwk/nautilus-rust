@@ -117,6 +117,8 @@ macro_rules! error {
 }
 
 /// Logs a warning message (truncated if excessively long).
+// `_warn` instead of `warn` because `warn` is also the name of some
+// built-in, which leads to ambiguity in the `pub use`.
 macro_rules! _warn {
     ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): WARNING {}\n",

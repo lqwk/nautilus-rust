@@ -2,6 +2,7 @@ use crate::kernel::bindings;
 use core::cell::UnsafeCell;
 use lock_api::{GuardSend, RawMutex};
 
+// These functions are wrappers around C macros. See `glue.c`.
 extern "C" {
     fn spin_lock_irq(lock: *mut bindings::spinlock_t) -> u8;
     fn spin_unlock_irq(lock: *mut bindings::spinlock_t, flags: u8);
@@ -17,7 +18,7 @@ pub struct _NkIrqLock {
 }
 
 impl _NkIrqLock {
-    // `spinlock_init()` simply sets the given `u32` to 0
+    // `spinlock_init` simply sets the given `u32` to 0
     // `state_flags` can have an arbitrary initial value
     const fn new() -> Self {
         _NkIrqLock {

@@ -8,6 +8,12 @@ use alloc::{sync::Arc, boxed::Box, ffi::CString};
 use crate::prelude::*;
 use crate::kernel::bindings;
 
+/// Manages resources associated with registering a character
+/// device.
+/// 
+/// # Invariants
+///
+/// `dev` and `data` are valid, non-null pointers.
 #[doc(hidden)]
 struct _InternalRegistration<T> {
     name: CString,
@@ -30,8 +36,9 @@ struct _InternalRegistration<T> {
 // `irq::_InternalRegistration`.
 unsafe impl<T> Send for _InternalRegistration<T> {}
 
+#[doc(hidden)]
 impl<T> _InternalRegistration<T> {
-    /// Registers `dev` with Nautilus' chararcter device subsytem.
+    /// Registers a character device with Nautilus' character device subsytem.
     unsafe fn try_new(
         name: &str,
         interface: *mut bindings::nk_char_dev_int,
@@ -99,43 +106,72 @@ impl<T> Drop for _InternalRegistration<T> {
     }
 }
 
-// Can't use `c_int` here. This shouldn't be a problem on normal systems.
-#[repr(i32)]
-pub enum StatusReturn {
-    NotReady = 0,
+/// The return type of the `status` function for character devices.
+#[repr(i32)] // Can't use `c_int` here. This shouldn't be a problem on normal systems.
+pub enum Status {
+    /// The device is not ready for read/write operations right now.
+    Busy = 0,
+    /// The device is available for reading, but not writing.
     Readable = bindings::NK_CHARDEV_READABLE as _,
+    /// The device is available for writing, but not reading.
     Writable = bindings::NK_CHARDEV_WRITEABLE as _,
+    /// The device is available for both reading and writing.
     ReadableAndWritable = (bindings::NK_CHARDEV_READABLE | bindings::NK_CHARDEV_WRITEABLE) as _,
-    Error    = bindings::NK_CHARDEV_ERROR as _,
+    /// The device is in an erroneous state.
+    Error = bindings::NK_CHARDEV_ERROR as _,
 }
 
-pub enum RwReturn<T = ()> {
+/// The return type of the `read` and `write` functions for character devices.
+/// Nautilus requires that these functions do not block, and so it defines
+/// three possible return statuses: success, failure, and not ready.
+pub enum RwResult<T = ()> {
+    /// The read/write succeeded. `T` should be the value read if it
+    /// was a `read` operation, or `()` if it was a `write`.
     Ok(T),
+    /// The read/write did not occur because it would have blocked.
     WouldBlock,
+    /// There was an error while reading/writing.
     Err
 }
 
-impl<T> core::convert::Into<c_int> for RwReturn<T> {
+impl<T> core::convert::Into<c_int> for RwResult<T> {
     fn into(self) -> c_int {
         match self {
-            RwReturn::Ok(_) => 1,
-            RwReturn::WouldBlock => 0,
-            RwReturn::Err => -1
+            // It may be surprising that `0` indicates would-have-blocked
+            // and not success, but that's just the way it is in Nautilus.
+            RwResult::Ok(_) => 1,
+            RwResult::WouldBlock => 0,
+            RwResult::Err => -1
         }
     }
 }
 
+/// Characteristics of the character device. Currently, this
+/// is a zero-sized type in Nautilus.
 pub type Characteristics = bindings::nk_char_dev_characteristics;
 
+/// A Nautilus character device.
 pub trait Chardev {
+    /// The state associated with the character device.
     type State;
 
-    fn status(state: &Self::State) -> StatusReturn;
-    fn read(state: &Self::State) -> RwReturn<u8>;
-    fn write(state: &Self::State, data: u8) -> RwReturn;
+    /// Checks the devices status. Can be readable, writable,
+    /// both, neither, or in a erroneous state.
+    fn status(state: &Self::State) -> Status;
+
+    /// Reads one byte from the character device.
+    fn read(state: &Self::State) -> RwResult<u8>;
+
+    /// Write one byte to the character device.
+    fn write(state: &Self::State, data: u8) -> RwResult;
+
+    /// Gets the characteristics of the character device.
+    /// Currently, character devices have no characteristics
+    /// in Nautilus, so `Characteristics` is a zero-sized type.
     fn get_characteristics(state: &Self::State) -> Result<Characteristics>;
 }
 
+/// The registration of a character device.
 pub struct Registration<C: Chardev>(_InternalRegistration<C::State>);
 
 impl<C: Chardev> Registration<C> {
@@ -153,7 +189,7 @@ impl<C: Chardev> Registration<C> {
         
         let ret = C::read(state);
         match ret {
-            RwReturn::Ok(v) => unsafe { *dest = v },
+            RwResult::Ok(v) => unsafe { *dest = v },
             _ => {}
         };
 
@@ -195,6 +231,7 @@ impl<C: Chardev> Registration<C> {
 
     }
 
+    /// Registers a character device with Nautilus' character device subsytem.
     pub fn try_new(name: &str, data: Arc<C::State>) -> Result<Self> {
         let interface = Box::new(bindings::nk_char_dev_int {
             dev_int: bindings::nk_dev_int {
@@ -218,6 +255,7 @@ impl<C: Chardev> Registration<C> {
         }))
     }
 
+    /// Wakes up threads waiting on the character device.
     pub fn signal(&mut self) {
         if self.0.dev.is_null() {
             panic!("not registered");
@@ -227,5 +265,10 @@ impl<C: Chardev> Registration<C> {
         // SAFETY: `d` is a non-null pointer to `nk_dev`, guaranteed
         // by the existence of `self`.
         unsafe { bindings::nk_dev_signal(d); }
+    }
+
+    /// Gets the name of the character device.
+    pub fn name(&self) -> &str {
+        self.0.name.to_str().expect("Name is not valid UTF-8.")
     }
 }

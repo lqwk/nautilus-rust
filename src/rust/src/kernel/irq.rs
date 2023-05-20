@@ -5,6 +5,11 @@ use alloc::sync::Arc;
 use crate::prelude::*;
 use crate::kernel::bindings;
 
+/// Manages resources associated with an IRQ handler.
+/// 
+/// # Invariants
+///
+/// `data` is a valid, non-null pointer.
 #[doc(hidden)]
 struct _InternalRegistration<T> {
     int_vec: u16,
@@ -30,6 +35,7 @@ struct _InternalRegistration<T> {
 // implications of this line.
 unsafe impl<T> Send for _InternalRegistration<T> {}
 
+#[doc(hidden)]
 impl<T> _InternalRegistration<T> {
     /// Registers a new irq handler.
     unsafe fn try_new(
@@ -92,6 +98,7 @@ pub trait Handler {
     fn handle_irq(data: &Self::State) -> Result;
 }
 
+/// The registration of an interrupt handler.
 pub struct Registration<H: Handler>(_InternalRegistration<H::State>);
 
 impl<H: Handler> Registration<H> {
