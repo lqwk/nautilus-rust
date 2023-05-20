@@ -13,10 +13,10 @@ struct _InternalRegistration<T> {
 }
 
 // SAFETY: `data` is a raw pointer with no thread affinity. The C
-// interrupt handler using `data` does not modify data or move
-// it's referrent. We only store `data` in an `InternalRegistration`
+// interrupt handler using `data` does not modify `data` or move
+// it's referrent. We only store `data` in an `_InternalRegistration`
 // so that we can later reclaim the memory it points to. So it is
-// safe to send an `InternalRegistration` between threads. `Send`
+// safe to send an `_InternalRegistration` between threads. `Send`
 // is important to implement here so that, if some type `T` contains
 // an `irq::Registration`, then `Mutex<NkIrqLock, T>` (from `lock_api`)
 // implements `Sync` and `Send`.
@@ -96,10 +96,7 @@ pub struct Registration<H: Handler>(_InternalRegistration<H::State>);
 
 impl<H: Handler> Registration<H> {
     /// Registers a new irq handler.
-    pub fn try_new(
-        irq: u16,
-        data: Arc<H::State>,
-    ) -> Result<Self> {
+    pub fn try_new(irq: u16, data: Arc<H::State>) -> Result<Self> {
         // SAFETY: `handler` only calls `Arc::clone` on `raw_state`.
         Ok(Self(unsafe {
             _InternalRegistration::try_new(irq, Some(Self::handler), data)?

@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use crate::kernel::{irq, sync::IRQLock, chardev::NkCharDev};
+use crate::kernel::{sync::IRQLock, irq, chardev};
 use self::portio::{ParportIO, io_delay};
 
 use bitfield::bitfield;
@@ -44,7 +44,7 @@ enum ParportStatus {
 
 /// The data associated with the parport.
 pub struct Parport {
-    dev: Option<NkCharDev>,
+    dev: Option<chardev::Registration<Self>>,
     irq: Option<irq::Registration<Self>>,
     port: ParportIO,
     status: ParportStatus,
@@ -73,6 +73,88 @@ impl irq::Handler for Parport {
         Ok(())
         // End-of-interrupt will automatically be done
         // after this return.
+    }
+}
+
+impl chardev::Chardev for Parport {
+    type State = State;
+
+    fn status(parport: &Self::State) -> chardev::StatusReturn {
+        if parport.lock().is_ready() {
+            chardev::StatusReturn::ReadableAndWritable
+        } else {
+            chardev::StatusReturn::NotReady
+        }
+    }
+
+    fn read(parport: &Self::State) -> chardev::RwReturn<u8> {
+        debug!("read!");
+        let mut parport = parport.lock();
+        if !parport.is_ready() {
+            debug!("Unable to read while device is busy.");
+            return chardev::RwReturn::WouldBlock;
+        }
+        parport.status = ParportStatus::Busy;
+
+        // mark device as busy
+        debug!("setting device as busy");
+        let mut stat = parport.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        parport.port.write_stat(&stat);
+
+        parport.wait_for_attached_device();
+
+        // disable output drivers for reading so no fire happens
+        let mut ctrl = parport.port.read_ctrl();
+        ctrl.set_bidir_en(true); // active low to enable output
+        parport.port.write_ctrl(&ctrl);
+
+        chardev::RwReturn::Ok(parport.port.read_data().data)
+
+    }
+
+    fn write(parport: &Self::State, data: u8) -> chardev::RwReturn {
+        debug!("write!");
+        let mut parport = parport.lock();
+        if !parport.is_ready() {
+            debug!("Unable to write while device is busy.");
+            return chardev::RwReturn::WouldBlock;
+        }
+        parport.status = ParportStatus::Busy;
+
+        // mark device as busy
+        debug!("setting device as busy");
+        let mut stat = parport.port.read_stat();
+        stat.set_busy(false); // stat.busy = 0
+        parport.port.write_stat(&stat);
+
+        parport.wait_for_attached_device();
+
+        // set device to output mode
+        debug!("setting device to output mode");
+        let mut ctrl = parport.port.read_ctrl();
+        ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
+        parport.port.write_ctrl(&ctrl);
+
+        // write data byte to data register
+        debug!("writing data to device");
+        parport.port.write_data(&DataReg { data });
+
+        // strobe the attached printer
+        debug!("strobing device");
+        ctrl.set_strobe(false); // ctrl.strobe = 0
+        parport.port.write_ctrl(&ctrl);
+        ctrl.set_strobe(true); // ctrl.strobe = 1
+        parport.port.write_ctrl(&ctrl);
+        ctrl.set_strobe(false); // ctrl.strobe = 0
+        parport.port.write_ctrl(&ctrl);
+
+        chardev::RwReturn::Ok(())
+
+    }
+
+    fn get_characteristics(_state: &Self::State) -> Result<chardev::Characteristics> {
+        Ok(chardev::Characteristics{})
     }
 }
 
@@ -111,15 +193,25 @@ impl Parport {
         parport.lock().irq.take();
     }
 
-    fn register_chardev(parport: &Arc<State>, dev: NkCharDev) -> Result {
-        parport
-            .lock()
-            .dev
-            .insert(dev)
-            .register(parport.clone())
-            .inspect_err(|e| error!("Failed to register chardev. Error code {e}."))?;
+    fn register_chardev(parport: &Arc<State>, name: &str) -> Result {
+        // Get rid of the previous registration, if any.
+        // This means that registering twice is safe (but useless).
+        Parport::unregister_chardev(parport);
+
+        // Do the registration.
+        parport.lock().dev = Some(
+            chardev::Registration::try_new(name, Arc::clone(parport))
+                .inspect_err(|_| error!("Parport IRQ registration failed."))?,
+        );
 
         Ok(())
+    }
+
+    /// Unregister the character device.
+    fn unregister_chardev(parport: &Arc<State>) {
+        // The character device is unregistered whenever the `chardev::Registration`
+        // is dropped.
+        parport.lock().dev.take();
     }
 
     fn init(&mut self) {
@@ -139,66 +231,6 @@ impl Parport {
                 break;
             }
         }
-    }
-
-    pub fn write(&mut self, data: u8) -> Result {
-        if !self.is_ready() {
-            debug!("Unable to write while device is busy.");
-            return Err(-1);
-        }
-        self.status = ParportStatus::Busy;
-
-        // mark device as busy
-        debug!("setting device as busy");
-        let mut stat = self.port.read_stat();
-        stat.set_busy(false); // stat.busy = 0
-        self.port.write_stat(&stat);
-
-        self.wait_for_attached_device();
-
-        // set device to output mode
-        debug!("setting device to output mode");
-        let mut ctrl = self.port.read_ctrl();
-        ctrl.set_bidir_en(false); // ctrl.bidir_en = 0
-        self.port.write_ctrl(&ctrl);
-
-        // write data byte to data register
-        debug!("writing data to device");
-        self.port.write_data(&DataReg { data });
-
-        // strobe the attached printer
-        debug!("strobing device");
-        ctrl.set_strobe(false); // ctrl.strobe = 0
-        self.port.write_ctrl(&ctrl);
-        ctrl.set_strobe(true); // ctrl.strobe = 1
-        self.port.write_ctrl(&ctrl);
-        ctrl.set_strobe(false); // ctrl.strobe = 0
-        self.port.write_ctrl(&ctrl);
-
-        Ok(())
-    }
-
-    pub fn read(&mut self) -> Result<u8> {
-        if !self.is_ready() {
-            debug!("Unable to read while device is busy.");
-            return Err(-1);
-        }
-        self.status = ParportStatus::Busy;
-
-        // mark device as busy
-        debug!("setting device as busy");
-        let mut stat = self.port.read_stat();
-        stat.set_busy(false); // stat.busy = 0
-        self.port.write_stat(&stat);
-
-        self.wait_for_attached_device();
-
-        // disable output drivers for reading so no fire happens
-        let mut ctrl = self.port.read_ctrl();
-        ctrl.set_bidir_en(true); // active low to enable output
-        self.port.write_ctrl(&ctrl);
-
-        Ok(self.port.read_data().data)
     }
 
     pub fn is_ready(&mut self) -> bool {
@@ -225,14 +257,10 @@ lazy_static! {
 }
 
 fn bringup_device(name: &str, irq: u8) -> Result {
-    let dev = NkCharDev::new(name);
-
     PARPORT.lock().init();
 
     Parport::register_irq(&PARPORT, irq as u16)?;
-    Parport::register_chardev(&PARPORT, dev)?;
-
-    debug!("{:?}", PARPORT.lock().dev.as_ref().map(|dev| dev.name.as_str()));
+    Parport::register_chardev(&PARPORT, name)?;
 
     Ok(())
 }
@@ -251,7 +279,7 @@ register_shell_command!("parport", "parport up | parport down", |command| {
         },
         "parport down" => {
             Parport::unregister_irq(&PARPORT);
-            // TODO: unregister the character device for the parport.
+            Parport::unregister_chardev(&PARPORT);
             Ok(())
         },
         _ => {
