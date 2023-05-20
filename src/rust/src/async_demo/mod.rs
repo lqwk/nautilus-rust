@@ -49,5 +49,5 @@ register_shell_command!("rust_async", "rust_async", |_| {
     debug!("Entered Rust Async code.");
     kernel_main();
     debug!("Exiting Rust Async code.");
-    0
+    Ok(())
 });

@@ -90,7 +90,7 @@ impl Parport {
     }
 
     /// Register the interrupt handler.
-    fn register_irq(int_vec: u16, parport: &Arc<State>) -> Result {
+    fn register_irq(parport: &Arc<State>, int_vec: u16) -> Result {
         // Get rid of the previous registration, if any.
         // This means that registering twice is safe (but useless).
         Parport::unregister_irq(parport);
@@ -111,7 +111,7 @@ impl Parport {
         parport.lock().irq.take();
     }
 
-    fn register_chardev(dev: NkCharDev, parport: &Arc<State>) -> Result {
+    fn register_chardev(parport: &Arc<State>, dev: NkCharDev) -> Result {
         parport
             .lock()
             .dev
@@ -201,10 +201,6 @@ impl Parport {
         Ok(self.port.read_data().data)
     }
 
-    fn get_name(&self) -> Option<String> {
-        self.dev.as_ref().map(|dev| dev.get_name())
-    }
-
     pub fn is_ready(&mut self) -> bool {
         self.status == ParportStatus::Ready
     }
@@ -233,10 +229,10 @@ fn bringup_device(name: &str, irq: u8) -> Result {
 
     PARPORT.lock().init();
 
-    Parport::register_irq(irq as u16, &PARPORT)
-        .and_then(|_| Parport::register_chardev(dev, &PARPORT))?;
+    Parport::register_irq(&PARPORT, irq as u16)?;
+    Parport::register_chardev(&PARPORT, dev)?;
 
-    debug!("{}", PARPORT.lock().get_name().unwrap());
+    debug!("{:?}", PARPORT.lock().dev.as_ref().map(|dev| dev.name.as_str()));
 
     Ok(())
 }
@@ -252,16 +248,15 @@ register_shell_command!("parport", "parport up | parport down", |command| {
         "parport up" => {
             discover_and_bringup_devices()
                 .inspect_err(|_| vc_println!("Unable to bring up parport device!"))
-                .as_error_code()
         },
         "parport down" => {
             Parport::unregister_irq(&PARPORT);
             // TODO: unregister the character device for the parport.
-            0
+            Ok(())
         },
         _ => {
             vc_println!("Usage: parport up | parport down");
-            -1
+            Err(-1)
         }
     }
 

@@ -19,5 +19,5 @@ register_shell_command!("rust", "rust", |_| {
     debug!("Entered Rust code.");
     example(8, 1);
     debug!("Exiting Rust code.");
-    0
+    Ok(())
 });
