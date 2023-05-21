@@ -8,6 +8,8 @@ use alloc::{sync::Arc, boxed::Box, ffi::CString};
 use crate::prelude::*;
 use crate::kernel::bindings;
 
+make_logging_macros!("chardev");
+
 /// Manages resources associated with registering a character
 /// device.
 /// 

@@ -3,6 +3,8 @@ use crate::task::{Task, executor::Executor};
 use crate::task::utils::yield_now;
 use crate::kernel::timer;
 
+make_logging_macros!("async");
+
 
 fn kernel_main() {
     let mut executor = Executor::new();

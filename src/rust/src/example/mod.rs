@@ -1,5 +1,7 @@
 use crate::prelude::*;
 
+make_logging_macros!("example");
+
 fn example(a: i32, b: i32) -> i32 {
     vc_println!("Hello, this is the Rust example module!");
     vc_println!("{} + {} = {}", a, b, a + b);

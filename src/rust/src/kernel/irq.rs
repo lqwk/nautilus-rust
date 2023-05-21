@@ -5,6 +5,8 @@ use alloc::sync::Arc;
 use crate::prelude::*;
 use crate::kernel::bindings;
 
+make_logging_macros!("irq");
+
 /// Manages resources associated with an IRQ handler.
 /// 
 /// # Invariants

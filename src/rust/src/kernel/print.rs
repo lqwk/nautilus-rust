@@ -97,9 +97,7 @@ pub fn _log(_args: fmt::Arguments) {
     _LogWriter.write_fmt(_args).unwrap();
 }
 
-/// Logs a debug message (truncated if excessively long).
-/// This macro is a noop if Rust debug prints are disabled in Kconfig.
-macro_rules! debug {
+macro_rules! debug_print {
     ($($arg:tt)*) => {{
         #[cfg_accessible($crate::kernel::bindings::NAUT_CONFIG_DEBUG_RUST)]
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): DEBUG: {}\n",
@@ -107,30 +105,107 @@ macro_rules! debug {
     }};
 }
 
-/// Logs an error message (truncated if excessively long).
-macro_rules! error {
+macro_rules! error_print {
     ($($arg:tt)*) => {{
-        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR: {}\n",
+        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): ERROR at src/rust/{}({}): {}\n",
+                                    core::file!(), core::line!(), format_args!($($arg)*)));
+    }};
+}
+
+macro_rules! warn_print {
+    ($($arg:tt)*) => {{
+        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): WARNING: {}\n",
                                     format_args!($($arg)*)));
     }};
 }
 
-/// Logs a warning message (truncated if excessively long).
-// `_warn` instead of `warn` because `warn` is also the name of some
-// built-in, which leads to ambiguity in the `pub use`.
-macro_rules! _warn {
-    ($($arg:tt)*) => {{
-        $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): WARNING {}\n",
-                                    format_args!($($arg)*)));
-    }};
-}
-
-/// Logs an info message (truncated if excessively long).
-macro_rules! info {
+macro_rules! info_print {
     ($($arg:tt)*) => {{
         $crate::kernel::print::_log(format_args!("CPU %d (%s%s %lu \"%s\"): {}\n",
                                     format_args!($($arg)*)));
     }};
 }
 
-pub(crate) use {vc_print, vc_println, error, debug, _warn as warn, info};
+// Magic needed for certain macro-generating macros. Rust temporarily had this feature
+// in 1.63 through the `$$` metavariable, but the feature was reverted soon after.
+// We could use `#![feature(macro_metavar_expr)]`, but in an effort to avoid unstable
+// features, we use this hack.
+//
+// See https://github.com/rust-lang/rust/issues/35853
+// and https://github.com/rust-lang/rust/issues/83527.
+macro_rules! with_dollar_sign {
+    ($($body:tt)*) => {
+        macro_rules! __with_dollar_sign { $($body)* }
+        __with_dollar_sign!($);
+    }
+}
+
+/// Makes the `debug`, `error`, `warn`, and `info` macros using the given prefix.
+///
+/// ```
+/// make_logging_macros!("example");
+/// ```
+///
+/// is analogous to the C code:
+///
+/// ```
+/// #define DEBUG(fmt, args...) DEBUG_PRINT("e1000_pci: " fmt, ##args)
+/// #define ERROR(fmt, args...) ERROR_PRINT("e1000_pci: " fmt, ##args)
+/// #define WARN(fmt, args...)  WARN_PRINT("e1000_pci: " fmt, ##args)
+/// #define INFO(fmt, args...)  INFO_PRINT("e1000_pci: " fmt, ##args)
+/// ```
+macro_rules! make_logging_macros {
+    ($prefix:expr) => {
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs a debug message (truncated if excessively long).
+                /// This macro is a noop if Rust debug prints are disabled in Kconfig.
+                #[allow(unused_macros)]
+                macro_rules! debug {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::debug_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs an error message (truncated if excessively long).
+                #[allow(unused_macros)]
+                macro_rules! error {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::error_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs a warning message (truncated if excessively long).
+                #[allow(unused_macros)]
+                macro_rules! warn {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::warn_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs an info message (truncated if excessively long).
+                #[allow(unused_macros)]
+                macro_rules! info {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::info_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+    };
+}
+
+#[allow(unused_imports)]
+pub(crate) use {vc_print, vc_println, debug_print, error_print, warn_print, info_print, make_logging_macros, with_dollar_sign};

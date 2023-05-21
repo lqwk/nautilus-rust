@@ -7,6 +7,8 @@ use lazy_static::lazy_static;
 
 mod portio;
 
+make_logging_macros!("parport");
+
 const PARPORT0_BASE: u16 = 0x378;
 const PARPORT0_IRQ: u8 = 7;
 const PARPORT0_NAME: &str = "parport0";
