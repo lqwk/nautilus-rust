@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 
 mod portio;
 
-make_logging_macros!("parport");
+make_logging_macros!("parport", NAUT_CONFIG_DEBUG_PARPORT);
 
 const PARPORT0_BASE: u16 = 0x378;
 const PARPORT0_IRQ: u8 = 7;
@@ -208,7 +208,7 @@ impl Parport {
         // Do the registration.
         parport.lock().dev = Some(
             chardev::Registration::try_new(name, Arc::clone(parport))
-                .inspect_err(|_| error!("Parport IRQ registration failed."))?,
+                .inspect_err(|_| error!("Parport chardev registration failed."))?,
         );
 
         Ok(())

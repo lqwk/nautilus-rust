@@ -205,6 +205,59 @@ macro_rules! make_logging_macros {
             }
         }
     };
+
+    ($prefix:expr, $config:ident) => {
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs a debug message (truncated if excessively long).
+                /// This macro is a noop if the relevant setting (the second argument
+                /// passed to `make_logging_macros!`) is disabled in Kconfig.
+                #[allow(unused_macros)]
+                macro_rules! debug {
+                    ($d($d args:expr),*) => {{
+                        #[cfg_accessible($crate::kernel::bindings::$config)]
+                        $crate::kernel::print::debug_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs an error message (truncated if excessively long).
+                #[allow(unused_macros)]
+                macro_rules! error {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::error_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs a warning message (truncated if excessively long).
+                #[allow(unused_macros)]
+                macro_rules! warn {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::warn_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+
+        $crate::kernel::print::with_dollar_sign! {
+            ($d:tt) => {
+                /// Logs an info message (truncated if excessively long).
+                #[allow(unused_macros)]
+                macro_rules! info {
+                    ($d($d args:expr),*) => {{
+                        $crate::kernel::print::info_print!("{}: {}", $prefix, format_args!($d($d args),*));
+                    }};
+                }
+            }
+        }
+    };
 }
 
 #[allow(unused_imports)]
