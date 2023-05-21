@@ -9,6 +9,7 @@ mod portio;
 
 const PARPORT0_BASE: u16 = 0x378;
 const PARPORT0_IRQ: u8 = 7;
+const PARPORT0_NAME: &str = "parport0";
 
 bitfield! {
     pub struct StatReg(u8);
@@ -43,6 +44,7 @@ enum ParportStatus {
 }
 
 /// The data associated with the parport.
+#[derive(Debug)]
 pub struct Parport {
     dev: Option<chardev::Registration<Self>>,
     irq: Option<irq::Registration<Self>>,
@@ -165,14 +167,12 @@ impl chardev::Chardev for Parport {
 impl Parport {
     /// Create an unitialized, unregistered `Parport`.
     pub fn new(port: ParportIO) -> Arc<State> {
-        let parport = Arc::new(IRQLock::new(Self {
+        Arc::new(IRQLock::new(Self {
             dev: None,
             irq: None,
             port,
             status: ParportStatus::Ready,
-        }));
-
-        parport
+        }))
     }
 
     /// Register the interrupt handler.
@@ -268,13 +268,13 @@ fn bringup_device(name: &str, irq: u8) -> Result {
     Parport::register_irq(&PARPORT, irq as u16)?;
     Parport::register_chardev(&PARPORT, name)?;
 
-    vc_println!("Registered device {}.", &PARPORT.lock().dev.as_ref().unwrap().name());
+    vc_println!("Registered device {}.", PARPORT.lock().dev.as_ref().unwrap().name());
 
     Ok(())
 }
 
 fn discover_and_bringup_devices() -> Result {
-    bringup_device("parport0", PARPORT0_IRQ)
+    bringup_device(PARPORT0_NAME, PARPORT0_IRQ)
         .inspect_err(|e| error!("Failed to bring up parport device. Error code {e}."))
 }
 

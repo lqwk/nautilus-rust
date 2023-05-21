@@ -15,6 +15,7 @@ use crate::kernel::bindings;
 ///
 /// `dev` and `data` are valid, non-null pointers.
 #[doc(hidden)]
+#[derive(Debug)]
 struct _InternalRegistration<T> {
     name: CString,
     dev: *mut bindings::nk_char_dev,
@@ -71,7 +72,7 @@ impl<T> _InternalRegistration<T> {
         if dev.is_null() {
             error!("Unable to register device {}.", name);
             // SAFETY: `ptr` came from a previous call to `into_raw`.
-            unsafe { let _ = Arc::from_raw(ptr); }
+            unsafe { let _ = Arc::from_raw(ptr as *mut T); }
             Err(-1)
         } else {
             debug!("Successfully registered device {}.", name);
@@ -89,12 +90,6 @@ impl<T> Drop for _InternalRegistration<T> {
     fn drop(&mut self) {
         debug!("Dropping a registration for device {:?}.", self.name);
 
-        let d = self.dev as *mut bindings::nk_char_dev;
-        // SAFETY: Inside of `self.dev`, there is a pointer to the
-        // chardev interface. This deallocation matches the call
-        // to `Box::leak` in `try_new` in the success case.
-        let _ = unsafe { Box::from_raw((*d).dev.interface) };
-
         // SAFETY: `self.dev` was successfully registered when the
         // registration was created, so it is non-null and safe to
         // deregister.
@@ -102,12 +97,13 @@ impl<T> Drop for _InternalRegistration<T> {
 
         // SAFETY: This matches the call to `into_raw` from `try_new`
         // in the success case.
-        unsafe { Arc::from_raw(self.data); }
+        unsafe { Arc::from_raw(self.data as *mut T); }
     }
 }
 
 /// The return type of the `status` function for character devices.
 #[repr(i32)] // Can't use `c_int` here. This shouldn't be a problem on normal systems.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     /// The device is not ready for read/write operations right now.
     Busy = 0,
@@ -124,6 +120,7 @@ pub enum Status {
 /// The return type of the `read` and `write` functions for character devices.
 /// Nautilus requires that these functions do not block, and so it defines
 /// three possible return statuses: success, failure, and not ready.
+#[derive(Debug)]
 pub enum RwResult<T = ()> {
     /// The read/write succeeded. `T` should be the value read if it
     /// was a `read` operation, or `()` if it was a `write`.
@@ -134,9 +131,9 @@ pub enum RwResult<T = ()> {
     Err
 }
 
-impl<T> core::convert::Into<c_int> for RwResult<T> {
-    fn into(self) -> c_int {
-        match self {
+impl<T> core::convert::From<RwResult<T>> for c_int {
+    fn from(val: RwResult<T>) -> Self {
+        match val {
             // It may be surprising that `0` indicates would-have-blocked
             // and not success, but that's just the way it is in Nautilus.
             RwResult::Ok(_) => 1,
@@ -153,7 +150,7 @@ pub type Characteristics = bindings::nk_char_dev_characteristics;
 /// A Nautilus character device.
 pub trait Chardev {
     /// The state associated with the character device.
-    type State;
+    type State: Send + Sync;
 
     /// Checks the devices status. Can be readable, writable,
     /// both, neither, or in a erroneous state.
@@ -172,6 +169,7 @@ pub trait Chardev {
 }
 
 /// The registration of a character device.
+#[derive(Debug)]
 pub struct Registration<C: Chardev>(_InternalRegistration<C::State>);
 
 impl<C: Chardev> Registration<C> {
@@ -188,10 +186,10 @@ impl<C: Chardev> Registration<C> {
         let state = unsafe { (raw_state as *const C::State).as_ref() }.unwrap();
         
         let ret = C::read(state);
-        match ret {
-            RwResult::Ok(v) => unsafe { *dest = v },
-            _ => {}
-        };
+        if let RwResult::Ok(v) = ret {
+            // SAFETY: Caller ensures `dest` is a valid pointer.
+            unsafe { *dest = v }; 
+        }
 
         ret.into()
     }
@@ -244,6 +242,15 @@ impl<C: Chardev> Registration<C> {
             get_characteristics: Some(Registration::<C>::get_characteristics)
         });
 
+        // Don't clean up this memory while the C code uses it.
+        // We could have used `Arc` (and `into_raw`) here instead of a
+        // `Box`, but the C code is the sole owner of the memory during
+        // its lifetime.
+        //
+        // In theory, we also could have put `interface` in static
+        // memory (since it is built of values known at compile-time),
+        // but Rust does not have generic statics at the moment, and
+        // we can't use `C` from the outer `impl` in that declaration.
         let interface_ptr = Box::leak(interface);
 
         // SAFETY: `name`, `interface_ptr`, and `data` are all valid pointers.
@@ -270,5 +277,22 @@ impl<C: Chardev> Registration<C> {
     /// Gets the name of the character device.
     pub fn name(&self) -> &str {
         self.0.name.to_str().expect("Name is not valid UTF-8.")
+    }
+}
+
+impl<C: Chardev> Drop for Registration<C> {
+    fn drop(&mut self) {
+        let d = self.0.dev as *mut bindings::nk_char_dev;
+
+        // SAFETY: Inside of `self.0.dev`, there is a pointer to the
+        // chardev interface. This deallocation matches the call
+        // to `Box::leak` in `Registration::try_new` in the success case.
+        //
+        // Note that we could have done this deallocation in `drop`
+        // for `_InternalRegistration`, but this would technically
+        // be dangerous if someone created an `_InternalRegistration`
+        // without `Registration::try_new` (which no-one should ever do).
+        // Anyway, it fits best here.
+        let _ = unsafe { Box::from_raw((*d).dev.interface) };
     }
 }

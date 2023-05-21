@@ -1,4 +1,3 @@
-#[allow(unused_macros)]
 use super::bindings;
 use core::fmt;
 

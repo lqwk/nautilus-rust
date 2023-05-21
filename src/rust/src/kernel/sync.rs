@@ -28,10 +28,14 @@ impl _NkIrqLock {
     }
 }
 
-// SAFETY: Nautilus' spinlock is thread-safe.
+// SAFETY: Nautilus' spinlock can be sent between threads.
 unsafe impl Send for _NkIrqLock {}
+// SAFETY: Nautilus' spinlock can be accessed concurrently.
 unsafe impl Sync for _NkIrqLock {}
 
+// SAFETY: `unlock` must only be called when the lock is held.
+// Do not use `_NkIrqLock` directly, instead use `IRQLock`,
+// for which `lock_api` makes everything footgun-proof.
 unsafe impl RawMutex for _NkIrqLock {
     #[allow(clippy::declare_interior_mutable_const)]
     const INIT: _NkIrqLock = _NkIrqLock::new();

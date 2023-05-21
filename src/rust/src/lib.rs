@@ -32,8 +32,9 @@ extern crate alloc;
 
 #[allow(unused_imports)]
 mod prelude;
-#[allow(unused_macros)]
-#[allow(dead_code)]
+#[deny(missing_debug_implementations)]
+#[warn(clippy::undocumented_unsafe_blocks)]
+#[allow(unused_macros, dead_code)]
 mod kernel;
 mod example;
 mod parport;

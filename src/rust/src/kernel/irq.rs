@@ -11,6 +11,7 @@ use crate::kernel::bindings;
 ///
 /// `data` is a valid, non-null pointer.
 #[doc(hidden)]
+#[derive(Debug)]
 struct _InternalRegistration<T> {
     int_vec: u16,
     data: *mut c_void,
@@ -69,7 +70,7 @@ impl<T> _InternalRegistration<T> {
             Err(e) => {
                 error!("Unable to register IRQ {irq}. Error code {e}.");
                 // SAFETY: `ptr` came from a previous call to `into_raw`.
-                unsafe { let _ = Arc::from_raw(ptr); }
+                unsafe { let _ = Arc::from_raw(ptr as *mut T); }
                 Err(e)
             },
         }
@@ -85,7 +86,7 @@ impl<T> Drop for _InternalRegistration<T> {
         unsafe { bindings::nk_mask_irq(self.int_vec as u8); }
 
         // SAFETY: This matches the call to `into_raw` from `try_new` in the success case.
-        unsafe { Arc::from_raw(self.data); }
+        unsafe { Arc::from_raw(self.data as *mut T); }
     }
 }
 
@@ -99,6 +100,7 @@ pub trait Handler {
 }
 
 /// The registration of an interrupt handler.
+#[derive(Debug)]
 pub struct Registration<H: Handler>(_InternalRegistration<H::State>);
 
 impl<H: Handler> Registration<H> {

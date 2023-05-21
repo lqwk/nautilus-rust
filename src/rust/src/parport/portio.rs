@@ -3,6 +3,7 @@ use x86_64::instructions::port::{PortRead, PortWrite};
 
 const DELAY_PORT: u16 = 0x80;
 
+#[derive(Debug)]
 pub struct ParportIO {
     data_port: u16,
     stat_port: u16,

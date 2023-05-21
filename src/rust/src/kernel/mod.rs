@@ -3,6 +3,7 @@ extern crate alloc;
 use core::panic::PanicInfo;
 use crate::kernel::print::vc_println;
 
+#[allow(clippy::all, clippy::undocumented_unsafe_blocks)]
 pub mod bindings;
 pub mod allocator;
 pub mod sync;
