@@ -17,7 +17,6 @@
 ///     vc_println!("hello");
 /// });
 /// ```
-#[macro_export]
 macro_rules! register_shell_command {
     ($cmd:expr, $help:expr, $handler:expr) => {
         // Rust macros can't create new identifiers programatically as easily
@@ -30,6 +29,7 @@ macro_rules! register_shell_command {
                 let command = unsafe { core::ffi::CStr::from_ptr(buf) };
 
                 $handler(command.to_str().expect("Shell command string is not valid UTF-8."))
+                    .as_error_code()
             }
 
             // Nautilus shell commands are registered by placing a pointer in the
@@ -45,3 +45,5 @@ macro_rules! register_shell_command {
         }
     };
 }
+
+pub(crate) use register_shell_command;

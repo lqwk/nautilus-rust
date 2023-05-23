@@ -1067,6 +1067,13 @@ menu Debugging
       help
         Turn on debug prints for Rust modules
 
+    config DEBUG_PARPORT
+      bool "Debug Parport"
+      depends on DEBUG_RUST
+      default n
+      help
+        Turn on debug prints for the Rust parallel port driver.
+
     config DEBUG_THREADS
       bool "Debug Threads"
       depends on DEBUG_PRINTS

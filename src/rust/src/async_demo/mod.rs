@@ -3,6 +3,8 @@ use crate::task::{Task, executor::Executor};
 use crate::task::utils::yield_now;
 use crate::kernel::timer;
 
+make_logging_macros!("async");
+
 
 fn kernel_main() {
     let mut executor = Executor::new();
@@ -49,5 +51,5 @@ register_shell_command!("rust_async", "rust_async", |_| {
     debug!("Entered Rust Async code.");
     kernel_main();
     debug!("Exiting Rust Async code.");
-    0
+    Ok(())
 });

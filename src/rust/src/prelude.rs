@@ -2,6 +2,7 @@ pub use alloc::string::String;
 pub use alloc::sync::Arc;
 pub use alloc::vec::Vec;
 
-pub use crate::{debug, error, warn, info, register_shell_command, vc_print, vc_println};
+pub(crate) use crate::kernel::shell::register_shell_command;
+pub(crate) use crate::kernel::print::{vc_print, vc_println, make_logging_macros};
 
 pub use crate::kernel::error::{Result, ResultExt};
