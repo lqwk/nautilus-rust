@@ -35,6 +35,7 @@ use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
 // }
 
+// Not sure if necessary at all?
 pub struct GpuDevMode {
     width: u32,
     height: u32,
@@ -45,6 +46,7 @@ pub struct GpuDevMode {
     mode_data: c_void,
 }
 
+// Not sure if necessary at all?
 pub enum VideoModes {
     ChannelOffsetRed,
     ChannelOffsetGreen,
@@ -73,6 +75,7 @@ impl core::convert::From<VideoModes> for c_int {
     }
 }
 
+// Not sure if this is the right track 
 pub enum PassFail<T = ()> {
     Ok(T),
     Err,
@@ -193,12 +196,13 @@ pub trait GpuDev {
 
 }
 
+// only here so rust-analyzer will function, otherwise cant check code in the impl
 pub struct Registration<G: GpuDev>;
 
 impl<G: GpuDev>Registration<G> {
-    unsafe extern "C" fn get_available_modes(
-        raw_state:c_void, 
-        // modes: Vec<GpuDevMode>,
+    async unsafe extern "C" fn get_available_modes(
+        raw_state: c_void, 
+        modes: *mut bindings::nk_gpu_dev_video_mode_t,
         num_modes: *mut u32
     ) -> c_int {
         let state = unsafe { (raw_state as *const G::State).as_ref() }.unwrap();
