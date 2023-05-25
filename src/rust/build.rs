@@ -24,6 +24,8 @@ fn main() {
         .ctypes_prefix("core::ffi")
         // `core` instead of `libstd`
         .use_core()
+        // Make an actual enum for this type
+        .rustified_enum("nk_gpu_dev_bit_blit_op")
         .rust_target(bindgen::RustTarget::Nightly)
         // use with caution - NK's C code is built with GCC
         // whereas bindgen (and rustc) use clang.
