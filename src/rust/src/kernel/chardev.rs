@@ -153,7 +153,7 @@ impl<T> core::convert::From<RwResult<T>> for c_int {
 pub type Characteristics = bindings::nk_char_dev_characteristics;
 
 /// A Nautilus character device.
-pub trait Chardev {
+pub trait CharDev {
     /// The state associated with the character device.
     type State: Send + Sync;
 
@@ -175,9 +175,9 @@ pub trait Chardev {
 
 /// The registration of a character device.
 #[derive(Debug)]
-pub struct Registration<C: Chardev>(_InternalRegistration<C::State>);
+pub struct Registration<C: CharDev>(_InternalRegistration<C::State>);
 
-impl<C: Chardev> Registration<C> {
+impl<C: CharDev> Registration<C> {
     unsafe extern "C" fn status(raw_state: *mut c_void) -> c_int {
         // SAFETY: On registration, `into_raw` was called, so it is safe to borrow from it here
         // because `from_raw` is called only after the device is unregistered.
@@ -285,7 +285,7 @@ impl<C: Chardev> Registration<C> {
     }
 }
 
-impl<C: Chardev> Drop for Registration<C> {
+impl<C: CharDev> Drop for Registration<C> {
     fn drop(&mut self) {
         let d = self.0.dev as *mut bindings::nk_char_dev;
 
