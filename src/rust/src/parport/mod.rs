@@ -84,7 +84,7 @@ impl irq::Handler for Parport {
 // be registered with Nautilus' character device subsytem.
 // We get access to `chardev::Registration::try_new` from
 // this `impl`.
-impl chardev::Chardev for Parport {
+impl chardev::CharDev for Parport {
     type State = State;
 
     fn status(parport: &Self::State) -> chardev::Status {
