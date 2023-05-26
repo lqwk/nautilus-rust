@@ -137,7 +137,7 @@ pub trait GpuDev {
     //     modes = array of modes on entry, filled out on return
     //     num = size of array on entry, number of modes found on return
     // 
-    fn get_available_modes(state: &Self::State, modes: &mut [VideoMode]) -> Result;
+    fn get_available_modes(state: &Self::State, modes: &mut [VideoMode]) -> Result<usize>;
 
     // grab the current mode - useful in case you need to reset it later
     fn get_mode(state: &Self::State) -> Result<VideoMode>;
@@ -199,7 +199,16 @@ impl<G: GpuDev> Registration<G> {
         // SAFETY: Caller (GPU subsystem) ensures `raw_modes` is a pointer to `*num` modes.
         let modes = unsafe { core::slice::from_raw_parts_mut(raw_modes, *num as usize) };
 
-        G::get_available_modes(state, modes).as_error_code()
+        match G::get_available_modes(state, modes) {
+            Ok(n) => {
+                // SAFETY: Caller guarantees `num` is a valid pointer. Caller expects
+                // us to overwrite it's value before returning with the number of modes
+                // we found.
+                unsafe { *num = n as u32; }
+                0
+            },
+            Err(v) => v
+        }
     }
 
     unsafe extern "C" fn get_mode(
