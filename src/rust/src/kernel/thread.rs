@@ -24,8 +24,9 @@
 use alloc::{boxed::Box, ffi::CString};
 use core::ffi::c_void;
 
-use crate::kernel::{bindings, error::{Result, ResultExt}};
-use crate::debug;
+use crate::kernel::{bindings, error::{Result, ResultExt}, print::make_logging_macros};
+
+make_logging_macros!("gpudev");
 
 unsafe extern "C" fn call_closure<F, T>(raw_input: *mut c_void, raw_output: *mut *mut c_void)
 where

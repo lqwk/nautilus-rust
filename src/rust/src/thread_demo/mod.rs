@@ -1,6 +1,8 @@
 use crate::prelude::*;
 use crate::kernel::thread::{Thread, ThreadStackSize};
 
+make_logging_macros!("thread_demo");
+
 register_shell_command!("rust_thread", "rust_thread", |_| {
     debug!("Entered Rust Threading code.");
 
@@ -21,5 +23,5 @@ register_shell_command!("rust_thread", "rust_thread", |_| {
     );
 
     debug!("Exiting Rust Threading code.");
-    0
+    Ok(())
 });
