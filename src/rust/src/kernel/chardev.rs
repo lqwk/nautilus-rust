@@ -5,8 +5,11 @@ use core::{
 
 use alloc::{sync::Arc, boxed::Box, ffi::CString};
 
-use crate::prelude::*;
-use crate::kernel::bindings;
+use crate::kernel::{
+    error::Result,
+    print::make_logging_macros,
+    bindings
+};
 
 make_logging_macros!("chardev");
 
@@ -150,7 +153,7 @@ impl<T> core::convert::From<RwResult<T>> for c_int {
 pub type Characteristics = bindings::nk_char_dev_characteristics;
 
 /// A Nautilus character device.
-pub trait Chardev {
+pub trait CharDev {
     /// The state associated with the character device.
     type State: Send + Sync;
 
@@ -172,20 +175,20 @@ pub trait Chardev {
 
 /// The registration of a character device.
 #[derive(Debug)]
-pub struct Registration<C: Chardev>(_InternalRegistration<C::State>);
+pub struct Registration<C: CharDev>(_InternalRegistration<C::State>);
 
-impl<C: Chardev> Registration<C> {
+impl<C: CharDev> Registration<C> {
     unsafe extern "C" fn status(raw_state: *mut c_void) -> c_int {
         // SAFETY: On registration, `into_raw` was called, so it is safe to borrow from it here
-        // because `from_raw` is called only after the irq is unregistered.
-        let state = unsafe { (raw_state as *const C::State).as_ref() }.unwrap();
+        // because `from_raw` is called only after the device is unregistered.
+        let state = unsafe { &*(raw_state as *const C::State) };
         C::status(state) as _
     }
 
     unsafe extern "C" fn read(raw_state: *mut c_void, dest: *mut u8) -> c_int {
         // SAFETY: On registration, `into_raw` was called, so it is safe to borrow from it here
-        // because `from_raw` is called only after the irq is unregistered.
-        let state = unsafe { (raw_state as *const C::State).as_ref() }.unwrap();
+        // because `from_raw` is called only after the device is unregistered.
+        let state = unsafe { &*(raw_state as *const C::State) };
         
         let ret = C::read(state);
         if let RwResult::Ok(v) = ret {
@@ -198,8 +201,8 @@ impl<C: Chardev> Registration<C> {
 
     unsafe extern "C" fn write(raw_state: *mut c_void, src: *mut u8) -> c_int {
         // SAFETY: On registration, `into_raw` was called, so it is safe to borrow from it here
-        // because `from_raw` is called only after the irq is unregistered.
-        let state = unsafe { (raw_state as *const C::State).as_ref() }.unwrap();
+        // because `from_raw` is called only after the device is unregistered.
+        let state = unsafe { &*(raw_state as *const C::State) };
 
         // SAFETY: the `src` presented to us by the chardev subsytem is not null.
         let data = unsafe { *src };
@@ -214,8 +217,8 @@ impl<C: Chardev> Registration<C> {
         c: *mut bindings::nk_char_dev_characteristics
     ) -> c_int {
         // SAFETY: On registration, `into_raw` was called, so it is safe to borrow from it here
-        // because `from_raw` is called only after the irq is unregistered.
-        let state = unsafe { (raw_state as *const C::State).as_ref() }.unwrap();
+        // because `from_raw` is called only after the device is unregistered.
+        let state = unsafe { &*(raw_state as *const C::State) };
 
         let ret = C::get_characteristics(state);
         match ret {
@@ -253,10 +256,10 @@ impl<C: Chardev> Registration<C> {
         // memory (since it is built of values known at compile-time),
         // but Rust does not have generic statics at the moment, and
         // we can't use `C` from the outer `impl` in that declaration.
-        let interface_ptr = Box::leak(interface);
+        let interface_ptr = Box::into_raw(interface);
 
         // SAFETY: `name`, `interface_ptr`, and `data` are all valid pointers.
-        // The call to `Box::from_raw` matches the call to `Box::leak` in the
+        // The call to `Box::from_raw` matches the call to `Box::into_raw` in the
         // error case.
         Ok(Self(unsafe {
             _InternalRegistration::try_new(name, interface_ptr, data)
@@ -282,13 +285,13 @@ impl<C: Chardev> Registration<C> {
     }
 }
 
-impl<C: Chardev> Drop for Registration<C> {
+impl<C: CharDev> Drop for Registration<C> {
     fn drop(&mut self) {
         let d = self.0.dev as *mut bindings::nk_char_dev;
 
         // SAFETY: Inside of `self.0.dev`, there is a pointer to the
         // chardev interface. This deallocation matches the call
-        // to `Box::leak` in `Registration::try_new` in the success case.
+        // to `Box::into_raw` in `Registration::try_new` in the success case.
         //
         // Note that we could have done this deallocation in `drop`
         // for `_InternalRegistration`, but this would technically

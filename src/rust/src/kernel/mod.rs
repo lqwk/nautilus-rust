@@ -9,6 +9,7 @@ pub mod allocator;
 pub mod sync;
 pub mod irq;
 pub mod chardev;
+pub mod gpudev;
 pub mod shell;
 pub mod print;
 pub mod error;
