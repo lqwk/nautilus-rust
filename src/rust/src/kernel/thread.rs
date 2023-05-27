@@ -21,11 +21,23 @@
 //! calling FFI functions, or manipulating the thread of execution. The functions in this module
 //! carefully uphold the necessary invariants to ensure memory safety, but it's important to
 //! understand the underlying model when using this API.
-use alloc::ffi::CString;
+use alloc::{boxed::Box, ffi::CString};
 use core::ffi::c_void;
 
-use crate::kernel::bindings;
-use crate::kernel::error::{Result, ResultExt};
+use crate::kernel::{bindings, error::{Result, ResultExt}};
+use crate::debug;
+
+unsafe extern "C" fn call_closure<F, T>(raw_input: *mut c_void, raw_output: *mut *mut c_void)
+where
+    F: FnMut() -> T,
+{
+    debug!("{:?}", raw_input);
+    let callback = unsafe { &mut *(raw_input as *mut F) };
+    debug!("here");
+    let out = callback();
+    debug!("there");
+    unsafe { **(raw_output as *mut *mut T) = out; }
+}
 
 pub type ThreadId = *mut c_void;
 pub type ThreadFun = unsafe extern "C" fn(*mut c_void, *mut *mut c_void);
@@ -176,21 +188,18 @@ impl Thread {
     ///     let thread = Thread::start(None, None, None, false, ThreadStackSize::Default, -1);
     /// }
     /// ```
-    pub fn start(
-        fun: Option<ThreadFun>,
-        input: *mut c_void,
+    pub fn start<F, T>(
+        f: F,
         output: *mut *mut c_void,
         is_detached: bool,
         stack_size: ThreadStackSize,
         bound_cpu: i32,
-    ) -> Result<Self> {
+    ) -> Result<Self> 
+    where
+        F: FnMut() -> T + Send + 'static,
+        T: Send + 'static
+    {
         let mut tid = core::ptr::null_mut();
-        let mut is_detached_u8: u8;
-        if is_detached {
-            is_detached_u8 = 1;
-        } else {
-            is_detached_u8 = 0;
-        }
 
         // SAFETY: `nk_thread_start` is a C function that expects valid
         // function pointers, input pointer, output pointer and stack
@@ -199,10 +208,10 @@ impl Thread {
         // thread operations.
         let ret = unsafe {
             bindings::nk_thread_start(
-                fun,
-                input,
+                Some(call_closure::<F, T>),
+                Box::into_raw(Box::new(f)) as *const F as *mut _,
                 output,
-                is_detached_u8,
+                is_detached as u8,
                 stack_size as u64,
                 &mut tid,
                 bound_cpu,
