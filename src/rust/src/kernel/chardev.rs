@@ -155,7 +155,7 @@ pub type Characteristics = bindings::nk_char_dev_characteristics;
 /// A Nautilus character device.
 pub trait CharDev {
     /// The state associated with the character device.
-    type State: Send + Sync;
+    type State: Send + 'static;
 
     /// Checks the devices status. Can be readable, writable,
     /// both, neither, or in a erroneous state.
