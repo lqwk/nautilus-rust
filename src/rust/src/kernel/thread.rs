@@ -65,6 +65,10 @@ unsafe extern "C" fn call_closure_inherit_vc<F, T>(raw_input: *mut c_void, _: *m
 where
     F: FnMut() -> T,
 {
+    // SAFETY: `_glue_get_cur_thread` returns a valid pointer (since we are executing
+    // in a thread). `(*_glue_get_cur_thread()).parent` is also a valid pointer, since
+    // this function was called as a result of spawning a non-detached thread (i.e. we
+    // have a parent).
     unsafe { (*_glue_get_cur_thread()).vc =  (*(*_glue_get_cur_thread()).parent).vc; }
 
     // SAFETY: The C caller makes sure that `raw_input` is the pointer we passed
@@ -187,7 +191,7 @@ impl Builder {
 
         let Builder { name, stack_size, bound_cpu, inherits_vc } = self;
 
-        let thread_fn = if let Some(_) = inherits_vc {
+        let thread_fn = if inherits_vc.is_some() {
             call_closure_inherit_vc::<F, T>
         } else {
             call_closure::<F, T>
@@ -232,6 +236,10 @@ impl Builder {
             .unwrap_or(core::ptr::null_mut());
 
         if !name_ptr.is_null() {
+            // SAFETY: `nk_thread_name` expects a non-null second argument.
+            // We have checked for that above. `id` is also a valid `nk_thread_id_t`,
+            // since we acquired it as a result of a successful call to
+            // `nk_thread_create`.
             unsafe { bindings::nk_thread_name(id, name_ptr) };
 
             // SAFETY: This call matches the call to `CString::into_raw`
@@ -242,7 +250,8 @@ impl Builder {
             let _ = unsafe { CString::from_raw(name_ptr) } ;
         }
 
-        // SAFETY: FFI call.
+        // SAFETY: id` is a valid `nk_thread_id_t`, since we acquired
+        // it as a result of a successful call to `nk_thread_create`.
         unsafe { bindings::nk_thread_run(id); }
 
         Ok(JoinHandle { id, data })
@@ -274,6 +283,8 @@ impl<F, T> JoinHandle<F, T> {
         // thread creation. It also expects a valid pointer for storing thread output.
         let ret = unsafe { bindings::nk_join(self.id, core::ptr::null_mut() as _) };
 
+        // SAFETY: The output has been written to by the thread function, so it
+        // is safe to `assume_init` here.
         Result::from_error_code(ret).map(|_| { unsafe { self.data.take().unwrap().into_inner().1.assume_init() } })
     }
 
@@ -284,7 +295,9 @@ impl<F, T> Drop for JoinHandle<F, T> {
         // TODO: should we manually destroy the thread here,
         // or let them be reaped by the scheduler?
 
-        if let Some(ref mut thread_data) = *self.data {
+        let data = self.data.take();
+
+        if let Some(thread_data) = data {
             // If the `JoinHandle` was dropped with the inner data still
             // alive, then the thread was never joined-on, and may still
             // be running. Running a destructor on memory it's using
