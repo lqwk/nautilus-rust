@@ -14,12 +14,12 @@
 //! });
 //! ```
 //!
-//! In this example, the spawned thread is “detached,” which means that there is no way
+//! In this example, the thread's handle is never used, which means that there is no way
 //! for the program to learn when the spawned thread completes or otherwise terminates.
 //! 
 //! To learn when a thread completes, it is necessary to capture the [`JoinHandle`] object
-//! that is returned by the call to [`spawn`], which provides a [`join`][JoinHandle::join] method that allows the
-//! caller to wait for the completion of the spawned thread:
+//! that is returned by the call to [`spawn`], which provides a [`join`][JoinHandle::join]
+//! method that allows the caller to wait for the completion of the spawned thread:
 //!
 //! ```
 //! use crate::kernel::thread;
@@ -33,13 +33,24 @@
 //!
 //! # Configuring threads
 //!
-//! TODO
+//! A new thread can be configured before it is spawned via the [`Builder`] type,
+//! which currently allows you to set the name, stack size, and bound CPU
+//! for the thread:
+//!
+//! ```
+//! use crate::kernel::thread;
+//! 
+//! thread::Builder::new().name("my_thread").spawn(move || {
+//!     debug!("Hello, world!");
+//! });
+//!
+//! ```
 //!
 //! # Thread-local storage
 //!
 //! TODO
 
-use alloc::{boxed::Box, ffi::CString};
+use alloc::{boxed::Box, ffi::CString, string::String};
 use core::{ffi::c_void, cell::UnsafeCell, mem::MaybeUninit};
 
 use crate::kernel::{bindings, error::{Result, ResultExt}, print::make_logging_macros};
@@ -59,6 +70,153 @@ where
 
 pub type ThreadId = bindings::nk_thread_id_t;
 
+/// The possible stack sizes for a thread.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy)]
+pub enum StackSize {
+    _4KB = bindings::TSTACK_4KB,
+    _1MB = bindings::TSTACK_1MB,
+    _2MB = bindings::TSTACK_2MB,
+}
+
+#[must_use = "must eventually spawn the thread"]
+#[derive(Debug)]
+pub struct Builder {
+    name: Option<String>,
+    stack_size: Option<StackSize>,
+    bound_cpu: Option<i32>,
+}
+
+impl Builder {
+    /// Generates the base configuration for spawning a thread, from which
+    /// configuration methods can be chained.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crate::kernel::thread;
+    ///
+    /// let builder = thread::Builder::new()
+    ///                               .name("foo")
+    ///                               .stack_size(thread::StackSize::_4KB)
+    ///                               .bound_cpu(0);
+    ///
+    /// let handler = builder.spawn(|| {
+    ///     // thread code
+    /// }).unwrap();
+    ///
+    /// handler.join().unwrap();
+    /// ```
+    pub fn new() -> Builder {
+        Builder { name: None, stack_size: None, bound_cpu: None }
+    }
+
+    /// Names the thread-to-be.
+    ///
+    /// The name should be not contain null bytes (`\0`), and must be valid UTF-8.
+    /// Names greater than Nautilus' `MAX_THREAD_NAME - 1` (currenly `32 - 1 == 31`)
+    /// will be truncated.
+    pub fn name(mut self, name: String) -> Builder {
+        self.name = Some(name);
+        self
+    }
+
+    /// Sets the size of the stack for the new thread.
+    pub fn stack_size(mut self, size: StackSize) -> Builder {
+        self.stack_size = Some(size);
+        self
+    }
+
+    /// Sets the bound CPU for the new thread.
+    pub fn bound_cpu(mut self, cpu: u8) -> Builder {
+        self.bound_cpu = Some(cpu as i32);
+        self
+    }
+
+
+    /// Spawns a new thread by taking ownership of the [`Builder`], and returns a
+    /// [`kernel::error::Result`][`Result`] to its [`JoinHandle`].
+    ///
+    /// The spawned thread may outlive the caller. The join handle can be used to
+    /// block on termination of the spawned thread.
+    /// 
+    /// For a more complete documentation see [`thread::spawn`][spawn]. 
+    ///
+    /// # Errors
+    /// 
+    /// Unlike the [`spawn`] free function, this method yields a
+    /// [`kernel::error::Result`][`Result`] to capture any failure to create the 
+    /// thread at the OS level.
+    ///
+    /// # Panics
+    /// 
+    /// Panics if a thread name was set and it contained null bytes or was invalid
+    /// UTF-8.
+    pub fn spawn<F, T>(self, f: F) -> Result<JoinHandle<F, T>>
+    where
+        F: FnMut() -> T + Send + 'static,
+        T: Send + 'static
+    {
+        let mut id = core::ptr::null_mut();
+        let data = Box::new(Some(UnsafeCell::new((f, MaybeUninit::uninit()))));
+
+        let Builder { name, stack_size, bound_cpu } = self;
+
+        // SAFETY: `nk_thread_start` is a C function that expects valid
+        // function pointers, input pointer, output pointer and stack
+        // size for successful thread creation and running. If successful,
+        // it returns a valid pointer in 'tid' that can be used in other
+        // thread operations.
+        let ret = unsafe {
+            bindings::nk_thread_start(
+                Some(call_closure::<F, T>),
+                (*data).as_ref().unwrap().get() as *mut _,
+                // Nautilus' `output` handling for threads seems completely
+                // broken, and there is no C code using thread output to refer
+                // to ...
+                //
+                // So we cheat by using the input space above for the output data,
+                // and the broken output pointer is left null and untouched.
+                core::ptr::null_mut(),
+                // TODO: Currently all threads have `is_detached == false`,
+                // since making detached threads this way is currently broken.
+                // (Is it a Nautilus problem or our problem?)
+                false as u8,
+                stack_size.map(|size| size as u64).unwrap_or(bindings::TSTACK_DEFAULT as u64),
+                &mut id,
+                bound_cpu.unwrap_or(bindings::CPU_ANY),
+            )
+        };
+
+        if ret != 0 {
+            return Err(ret);
+        }
+        
+        let name_ptr = name
+            .map(|n| {
+                CString::new(n)
+                    .expect("Name is not valid UTF-8.")
+                    .into_raw()
+            })
+            .unwrap_or(core::ptr::null_mut());
+
+        if !name_ptr.is_null() {
+            unsafe { bindings::nk_thread_name(id, name_ptr) };
+
+            // SAFETY: This call matches the call to `CString::into_raw`
+            // above. It is safe to deallocate this memory even though
+            // we just handed it off to C, because `nk_thread_name`
+            // copies the passed name into its a string of its own (via
+            // `strncpy`) before it returns.
+            let _ = unsafe { CString::from_raw(name_ptr) } ;
+        }
+
+        Ok(JoinHandle { id, data })
+    }
+
+}
+
+
 /// An owned permission to join on a thread (block on its termination).
 /// 
 /// when a `JoinHandle` is dropped there is no longer any handle to the
@@ -73,16 +231,6 @@ pub struct JoinHandle<F, T> {
     data: Box<Option<UnsafeCell<(F, MaybeUninit<T>)>>> // awful awful awful
 }
 
-/// The possible stack sizes for a thread.
-#[repr(u32)]
-#[derive(Debug, Clone, Copy)]
-pub enum StackSize {
-    Default = bindings::TSTACK_DEFAULT,
-    _4KB = bindings::TSTACK_4KB,
-    _1MB = bindings::TSTACK_1MB,
-    _2MB = bindings::TSTACK_2MB,
-}
-
 impl<F, T> JoinHandle<F, T> {
     /// Waits for the associated thread to finish.
     ///
@@ -93,40 +241,6 @@ impl<F, T> JoinHandle<F, T> {
         let ret = unsafe { bindings::nk_join(self.id, core::ptr::null_mut() as _) };
 
         Result::from_error_code(ret).map(|_| { unsafe { self.data.take().unwrap().into_inner().1.assume_init() } })
-    }
-
-    /// Names the thread.
-    ///
-    /// # Arguments
-    ///
-    /// `name` - The name for the thread.
-    ///
-    /// # Returns
-    ///
-    /// Returns an empty `Result` on success, or a `ThreadError` on failure.
-    ///
-    /// # Safety
-    ///
-    /// This function is unsafe because it calls the C function `nk_thread_name`.
-    /// The safety of this function depends on the correct implementation of the C library.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use crate::kernel::thread::Thread;
-    ///
-    /// let thread = unsafe { Thread::create(None, None, None, false, ThreadStackSize::Default, -1).unwrap() };
-    /// let result = thread.name("MyThread");
-    /// assert!(result.is_ok());
-    /// ```
-    pub fn set_name(&self, name: &str) -> Result {
-        let cstr = CString::new(name).unwrap();
-
-        // SAFETY: `nk_thread_name` is a C function that expects a valid
-        // thread id and a valid null-terminated string pointer for the thread name.
-        // If successful, it sets the thread name and returns 0.
-        let ret = unsafe { bindings::nk_thread_name(self.id, cstr.as_ptr() as *mut i8) };
-        Result::from_error_code(ret)
     }
 
 }
@@ -155,7 +269,7 @@ impl<F, T> Drop for JoinHandle<F, T> {
 /// responsibility of the program to either eventually join threads it creates or detach them;
 /// otherwise, a resource leak will result.)
 /// 
-/// This call will create a thread using default parameters of (TODO) `Builder`, if you want to specify the
+/// This call will create a thread using default parameters of [`Builder`], if you want to specify the
 /// stack size or the name of the thread, use this API instead.
 /// 
 /// As you can see in the signature of `spawn` there are two constraints on both the closure given to
@@ -176,48 +290,24 @@ impl<F, T> Drop for JoinHandle<F, T> {
 ///   the Send marker trait expresses that it is safe to be passed from thread to thread.
 ///   `Sync` expresses that it is safe to have a reference be passed from
 ///   thread to thread.
-pub fn spawn<F, T>(
-    f: F,
-    is_detached: bool,
-    stack_size: StackSize,
-    bound_cpu: i32,
-) -> JoinHandle<F, T>
+///
+/// # Panics
+///
+/// Panics if Nautilus fails to create a thread; use [`Builder::spawn`] to recover from such errors.
+pub fn spawn<F, T>(f: F) -> JoinHandle<F, T>
 where
     F: FnMut() -> T + Send + 'static,
     T: Send + 'static
-{
-    let mut id = core::ptr::null_mut();
-    let data = Box::new(Some(UnsafeCell::new((f, MaybeUninit::uninit()))));
-
-    // SAFETY: `nk_thread_start` is a C function that expects valid
-    // function pointers, input pointer, output pointer and stack
-    // size for successful thread creation and running. If successful,
-    // it returns a valid pointer in 'tid' that can be used in other
-    // thread operations.
-    let ret = unsafe {
-        bindings::nk_thread_start(
-            Some(call_closure::<F, T>),
-            (*data).as_ref().unwrap().get() as *mut _,
-            core::ptr::null_mut(),
-            is_detached as u8,
-            stack_size as u64,
-            &mut id,
-            bound_cpu,
-        )
-    };
-
-    if ret != 0 {
-        panic!("Thread failed to spawn! Error code {ret}");
-    }
-
-    JoinHandle { id, data }
+{ 
+    Builder::new().spawn(f).expect("Thread failed to spawn!")
 }
 
 
 /// Causes the thread to yield execution to another thread that is ready to run.
 pub fn thread_yield() {
-    // SAFETY: `nk_yield` is a C function that causes the calling thread to yield execution to another thread that
-    // is ready to run and does not return a value.
+    // SAFETY: `nk_yield` is a C function that causes the calling thread
+    // to yield execution to another thread that is ready to run and
+    // does not return a value.
     unsafe { bindings::nk_yield(); }
 }
 
