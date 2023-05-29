@@ -40,3 +40,4 @@ mod example;
 mod parport;
 mod async_demo;
 mod task;
+mod virtio;
