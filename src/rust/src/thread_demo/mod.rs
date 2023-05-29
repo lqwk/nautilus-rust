@@ -6,7 +6,7 @@ use crate::kernel::sync::IRQLock;
 make_logging_macros!("thread_demo");
 
 fn basic_thread_test(n: usize) -> Result {
-    debug!("Beginning basic thread test.");
+    vc_println!("Beginning basic thread test.");
 
     let mut handles = Vec::with_capacity(n);
     let total = Arc::new(IRQLock::new(0_usize));
@@ -24,23 +24,26 @@ fn basic_thread_test(n: usize) -> Result {
     }
 
     if *total.lock() == n {
-        debug!("Basic thread test passed!");
+        vc_println!("Basic thread test passed!");
         Ok(())
     } else {
-        debug!("Basic thread test failed!");
+        vc_println!("Basic thread test failed!");
         Err(-1)
     }
 }
 
 fn builder_thread_test(n: usize) -> Result {
-    let mut handles = Vec::with_capacity(n);
+    vc_println!("Beginning thread builder test.");
+    vc_println!("Spawning {n} thread(s) to say hello ...");
 
+    let mut handles = Vec::with_capacity(n);
     for i in 0..n {
         handles.push(
             thread::Builder::new()
                 .name(alloc::format!("thread {i}"))
+                .inherit_vc()
                 .spawn(move || {
-                    debug!("[{i}] hello");
+                    vc_println!("    [{i}] hello");
                 })
                 .unwrap(),
         );
@@ -50,16 +53,19 @@ fn builder_thread_test(n: usize) -> Result {
         handle.join().unwrap();
     }
 
+    vc_println!("Finished thread builder test.");
+
     Ok(())
 }
 
 register_shell_command!("rust_thread", "rust_thread", |_| {
-    debug!("Entered Rust Threading code.");
+    debug!("Entered Rust threading demo.");
 
-    const N: usize = 500;
-    basic_thread_test(N)?;
+    basic_thread_test(500)?;
 
-    builder_thread_test(N)?;
+    builder_thread_test(1)?;
+
+    debug!("Exiting Rust threading demo.");
 
     Ok(())
 });

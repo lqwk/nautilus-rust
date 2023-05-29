@@ -34,8 +34,8 @@
 //! # Configuring threads
 //!
 //! A new thread can be configured before it is spawned via the [`Builder`] type,
-//! which currently allows you to set the name, stack size, and bound CPU
-//! for the thread:
+//! which currently allows you to set the name, stack size, bound CPU, and whether
+//! or not the parent's virtual console is inherited for the thread:
 //!
 //! ```
 //! use crate::kernel::thread;
@@ -56,6 +56,23 @@ use core::{ffi::c_void, cell::UnsafeCell, mem::MaybeUninit};
 use crate::kernel::{bindings, error::{Result, ResultExt}, print::make_logging_macros};
 
 make_logging_macros!("thread");
+
+extern "C" {
+    fn _glue_get_cur_thread() -> *mut bindings::nk_thread_t;
+}
+
+unsafe extern "C" fn call_closure_inherit_vc<F, T>(raw_input: *mut c_void, _: *mut *mut c_void)
+where
+    F: FnMut() -> T,
+{
+    unsafe { (*_glue_get_cur_thread()).vc =  (*(*_glue_get_cur_thread()).parent).vc; }
+
+    // SAFETY: The C caller makes sure that `raw_input` is the pointer we passed
+    // when we called `nk_thread_start`. The referrent of that pointer was a
+    // `(F, MaybeUninit<T>)` tuple, so it is safe to dereference it here as such.
+    let (callback, output) = unsafe { &mut *(raw_input as *mut (F, MaybeUninit<T>)) };
+    output.write(callback());
+}
 
 unsafe extern "C" fn call_closure<F, T>(raw_input: *mut c_void, _: *mut *mut c_void)
 where
@@ -85,6 +102,8 @@ pub struct Builder {
     name: Option<String>,
     stack_size: Option<StackSize>,
     bound_cpu: Option<i32>,
+    inherits_vc: Option<()>, // could be `bool`, but it's more consistent with
+                             // the other fields this way.
 }
 
 impl Builder {
@@ -108,7 +127,7 @@ impl Builder {
     /// handler.join().unwrap();
     /// ```
     pub fn new() -> Builder {
-        Builder { name: None, stack_size: None, bound_cpu: None }
+        Builder { name: None, stack_size: None, bound_cpu: None, inherits_vc: None }
     }
 
     /// Names the thread-to-be.
@@ -130,6 +149,12 @@ impl Builder {
     /// Sets the bound CPU for the new thread.
     pub fn bound_cpu(mut self, cpu: u8) -> Builder {
         self.bound_cpu = Some(cpu as i32);
+        self
+    }
+
+    /// The thread-to-be will inherit the virtual console of its parent.
+    pub fn inherit_vc(mut self) -> Builder {
+        self.inherits_vc = Some(());
         self
     }
 
@@ -160,16 +185,22 @@ impl Builder {
         let mut id = core::ptr::null_mut();
         let data = Box::new(Some(UnsafeCell::new((f, MaybeUninit::uninit()))));
 
-        let Builder { name, stack_size, bound_cpu } = self;
+        let Builder { name, stack_size, bound_cpu, inherits_vc } = self;
 
-        // SAFETY: `nk_thread_start` is a C function that expects valid
+        let thread_fn = if let Some(_) = inherits_vc {
+            call_closure_inherit_vc::<F, T>
+        } else {
+            call_closure::<F, T>
+        };
+
+        // SAFETY: `nk_thread_create` is a C function that expects valid
         // function pointers, input pointer, output pointer and stack
         // size for successful thread creation and running. If successful,
         // it returns a valid pointer in 'tid' that can be used in other
         // thread operations.
         let ret = unsafe {
-            bindings::nk_thread_start(
-                Some(call_closure::<F, T>),
+            bindings::nk_thread_create(
+                Some(thread_fn),
                 (*data).as_ref().unwrap().get() as *mut _,
                 // Nautilus' `output` handling for threads seems completely
                 // broken, and there is no C code using thread output to refer
@@ -210,6 +241,9 @@ impl Builder {
             // `strncpy`) before it returns.
             let _ = unsafe { CString::from_raw(name_ptr) } ;
         }
+
+        // SAFETY: FFI call.
+        unsafe { bindings::nk_thread_run(id); }
 
         Ok(JoinHandle { id, data })
     }

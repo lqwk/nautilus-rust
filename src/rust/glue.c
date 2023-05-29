@@ -28,7 +28,11 @@ void _glue_log_print(char* s) {
                 _p ? "" : "P");
         preempt_enable();
     }
- }
+}
+
+nk_thread_t* _glue_get_cur_thread() {
+    return get_cur_thread();
+}
 
 uint8_t spin_lock_irq(spinlock_t *lock) {
     return spin_lock_irq_save(lock);
