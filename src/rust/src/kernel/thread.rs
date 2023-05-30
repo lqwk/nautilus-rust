@@ -187,7 +187,7 @@ impl Builder {
         T: Send + 'static
     {
         let mut id = core::ptr::null_mut();
-        let data = Box::new(Some(UnsafeCell::new((f, MaybeUninit::uninit()))));
+        let data = Some(Box::new(UnsafeCell::new((f, MaybeUninit::uninit()))));
 
         let Builder { name, stack_size, bound_cpu, inherits_vc } = self;
 
@@ -205,7 +205,7 @@ impl Builder {
         let ret = unsafe {
             bindings::nk_thread_create(
                 Some(thread_fn),
-                (*data).as_ref().unwrap().get() as *mut _,
+                data.as_ref().unwrap().get() as *mut _,
                 // Nautilus' `output` handling for threads seems completely
                 // broken, and there is no C code using thread output to refer
                 // to ...
@@ -274,7 +274,7 @@ impl Builder {
 #[derive(Debug)]
 pub struct JoinHandle<F, T> {
     id: ThreadId,
-    data: Box<Option<UnsafeCell<(F, MaybeUninit<T>)>>> // awful awful awful
+    data: Option<Box<UnsafeCell<(F, MaybeUninit<T>)>>> // awful awful awful
 }
 
 impl<F, T> JoinHandle<F, T> {
@@ -302,13 +302,13 @@ impl<F, T> Drop for JoinHandle<F, T> {
 
         let data = self.data.take();
 
-        if let Some(thread_data) = data {
+        if let Some(thread_mem) = data {
             // If the `JoinHandle` was dropped with the inner data still
             // alive, then the thread was never joined-on, and may still
             // be running. Running a destructor on memory it's using
             // would be UB, so we have to leak it here.
-            core::mem::forget(thread_data);
-        } 
+            Box::leak(thread_mem);
+        }
     }
 }
 

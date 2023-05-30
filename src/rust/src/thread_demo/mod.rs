@@ -47,9 +47,6 @@ fn builder_thread_test(n: usize) -> Result {
     }
 
     for handle in handles.into_iter() {
-        // TODO: clearly still some issues with unjoined threads.
-        // Replace `handle.join()` with `Err(-1)` and observe the
-        // weird behavior.
         handle.join()?;
     }
 
