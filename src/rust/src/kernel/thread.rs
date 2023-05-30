@@ -39,11 +39,11 @@
 //!
 //! ```
 //! use crate::kernel::thread;
-//! 
-//! thread::Builder::new().name("my_thread").spawn(move || {
-//!     debug!("Hello, world!");
-//! });
 //!
+//! thread::Builder::new()
+//!     .name("my_thread")
+//!     .inherit_vc()
+//!     .spawn(move || { vc_println!("Hello, world!"); });
 //! ```
 //!
 //! # Thread-local storage
@@ -270,7 +270,7 @@ impl Builder {
 /// thread function and its output is forgotten and cannot be deallocated.
 /// 
 /// This struct is created by the [`thread::spawn`][spawn] function and the
-/// (TODO) `thread::Builder::spawn` method.
+/// `thread::Builder::spawn` method.
 #[derive(Debug)]
 pub struct JoinHandle<F, T> {
     id: ThreadId,
