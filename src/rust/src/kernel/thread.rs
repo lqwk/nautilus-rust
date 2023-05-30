@@ -51,7 +51,7 @@
 //! TODO
 
 use alloc::{boxed::Box, ffi::CString, string::String};
-use core::{ffi::c_void, cell::UnsafeCell, mem::MaybeUninit};
+use core::{ffi::c_void, cell::UnsafeCell, mem::MaybeUninit, time::Duration};
 
 use crate::kernel::{bindings, error::{Result, ResultExt}, print::make_logging_macros};
 
@@ -156,7 +156,7 @@ impl Builder {
         self
     }
 
-    /// The thread-to-be will inherit the virtual console of its parent.
+    /// Makes the thread-to-be inherit the virtual console of its parent.
     pub fn inherit_vc(mut self) -> Builder {
         self.inherits_vc = Some(());
         self
@@ -224,6 +224,7 @@ impl Builder {
         };
 
         if ret != 0 {
+            error!("failed to create thread");
             return Err(ret);
         }
         
@@ -240,21 +241,23 @@ impl Builder {
             // We have checked for that above. `id` is also a valid `nk_thread_id_t`,
             // since we acquired it as a result of a successful call to
             // `nk_thread_create`.
-            unsafe { bindings::nk_thread_name(id, name_ptr) };
+            unsafe { bindings::nk_thread_name(id, name_ptr); }
 
             // SAFETY: This call matches the call to `CString::into_raw`
             // above. It is safe to deallocate this memory even though
             // we just handed it off to C, because `nk_thread_name`
             // copies the passed name into its a string of its own (via
             // `strncpy`) before it returns.
-            let _ = unsafe { CString::from_raw(name_ptr) } ;
+            let _ = unsafe { CString::from_raw(name_ptr) };
         }
 
-        // SAFETY: id` is a valid `nk_thread_id_t`, since we acquired
+        // SAFETY: `id` is a valid `nk_thread_id_t`, since we acquired
         // it as a result of a successful call to `nk_thread_create`.
-        unsafe { bindings::nk_thread_run(id); }
+        let retval = unsafe { bindings::nk_thread_run(id) };
 
-        Ok(JoinHandle { id, data })
+        Result::from_error_code(retval)
+            .map(|_| JoinHandle { id, data })
+            .inspect_err(|e| error!("Failed to run thread. Error code {e}."))
     }
 
 }
@@ -281,11 +284,13 @@ impl<F, T> JoinHandle<F, T> {
     pub fn join(mut self) -> Result<T> {
         // SAFETY: `nk_join` is a C function that expects a valid thread id that was returned from a successful
         // thread creation. It also expects a valid pointer for storing thread output.
-        let ret = unsafe { bindings::nk_join(self.id, core::ptr::null_mut() as _) };
+        let retval = unsafe { bindings::nk_join(self.id, core::ptr::null_mut() as _) };
 
-        // SAFETY: The output has been written to by the thread function, so it
-        // is safe to `assume_init` here.
-        Result::from_error_code(ret).map(|_| { unsafe { self.data.take().unwrap().into_inner().1.assume_init() } })
+        Result::from_error_code(retval)
+            // SAFETY: The output has been written to by the thread function, so it
+            // is safe to `assume_init` here.
+            .map(|_| { unsafe { self.data.take().unwrap().into_inner().1.assume_init() } })
+            .inspect_err(|e| error!("Failed to join on thread. Error code {e}."))
     }
 
 }
@@ -426,4 +431,24 @@ pub fn fork() -> ThreadId {
     unsafe { bindings::nk_thread_fork() }
 }
 
-
+/// Puts the current thread to sleep for the specified amount of time.
+///
+/// This function is blocking, and should not be used in `async` functions.
+///
+/// # Examples
+///
+/// ```
+/// use core::time;
+/// use crate::kernel::thread;
+///
+/// let ten_millis = time::Duration::from_millis(10);
+/// let now = time::Instant::now();
+///
+/// thread::sleep(ten_millis);
+///
+/// assert!(now.elapsed() >= ten_millis);
+/// ```
+pub fn sleep(dur: Duration) {
+    // SAFETY: FFI call.
+    unsafe { bindings::nk_sleep(dur.as_nanos() as u64); }
+}

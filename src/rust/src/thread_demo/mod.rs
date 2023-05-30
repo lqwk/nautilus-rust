@@ -6,8 +6,6 @@ use crate::kernel::sync::IRQLock;
 make_logging_macros!("thread_demo");
 
 fn basic_thread_test(n: usize) -> Result {
-    vc_println!("Beginning basic thread test.");
-
     let mut handles = Vec::with_capacity(n);
     let total = Arc::new(IRQLock::new(0_usize));
 
@@ -20,20 +18,19 @@ fn basic_thread_test(n: usize) -> Result {
     }
 
     for handle in handles.into_iter() {
-        handle.join().unwrap();
+        handle
+            .join()
+            .inspect_err(|_| error!("failed to join on thread."))?;
     }
 
     if *total.lock() == n {
-        vc_println!("Basic thread test passed!");
         Ok(())
     } else {
-        vc_println!("Basic thread test failed!");
         Err(-1)
     }
 }
 
 fn builder_thread_test(n: usize) -> Result {
-    vc_println!("Beginning thread builder test.");
     vc_println!("Spawning {n} thread(s) to say hello ...");
 
     let mut handles = Vec::with_capacity(n);
@@ -43,29 +40,30 @@ fn builder_thread_test(n: usize) -> Result {
                 .name(alloc::format!("thread {i}"))
                 .inherit_vc()
                 .spawn(move || {
+                    thread::sleep(core::time::Duration::from_secs(i as u64));
                     vc_println!("    [{i}] hello");
-                })
-                .unwrap(),
+                })?,
         );
     }
 
     for handle in handles.into_iter() {
-        handle.join().unwrap();
+        // TODO: clearly still some issues with unjoined threads.
+        // Replace `handle.join()` with `Err(-1)` and observe the
+        // weird behavior.
+        handle.join()?;
     }
-
-    vc_println!("Finished thread builder test.");
 
     Ok(())
 }
 
 register_shell_command!("rust_thread", "rust_thread", |_| {
-    debug!("Entered Rust threading demo.");
+    vc_println!("Entered Rust threading demo.");
 
-    basic_thread_test(500)?;
+    basic_thread_test(500)
+        .and_then(|_| builder_thread_test(10))
+        .inspect_err(|_| vc_println!("Rust threading demo failed!"))?;
 
-    builder_thread_test(1)?;
-
-    debug!("Exiting Rust threading demo.");
+    vc_println!("Exiting Rust threading demo.");
 
     Ok(())
 });
