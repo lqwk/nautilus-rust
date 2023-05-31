@@ -155,7 +155,7 @@ pub type Characteristics = bindings::nk_char_dev_characteristics;
 /// A Nautilus character device.
 pub trait CharDev {
     /// The state associated with the character device.
-    type State: Send + Sync;
+    type State: Send + 'static;
 
     /// Checks the devices status. Can be readable, writable,
     /// both, neither, or in a erroneous state.
@@ -281,7 +281,7 @@ impl<C: CharDev> Registration<C> {
 
     /// Gets the name of the character device.
     pub fn name(&self) -> &str {
-        self.0.name.to_str().expect("Name is not valid UTF-8.")
+        self.0.name.to_str().expect("Name cannot contain internal null bytes.")
     }
 }
 

@@ -95,7 +95,7 @@ impl<T> Drop for _InternalRegistration<T> {
 /// An irq handler.
 pub trait Handler {
     /// The context data associated with and made available to the handler.
-    type State: Send + Sync;
+    type State: Send + 'static;
 
     /// Called from interrupt context when the irq happens.
     fn handle_irq(data: &Self::State) -> Result;

@@ -28,7 +28,7 @@ macro_rules! register_shell_command {
                 // is a bug in Nautilus' shell and not our fault.
                 let command = unsafe { core::ffi::CStr::from_ptr(buf) };
 
-                $handler(command.to_str().expect("Shell command string is not valid UTF-8."))
+                $handler(command.to_str().expect("Shell command string cannot contain interal null bytes."))
                     .as_error_code()
             }
 
