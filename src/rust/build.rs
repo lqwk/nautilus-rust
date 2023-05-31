@@ -5,6 +5,7 @@ use std::path::PathBuf;
 fn main() {
     // Tell cargo to invalidate the built crate whenever the kernel config changes
     println!("cargo:rerun-if-changed=../../.config");
+    println!("cargo:rerun-if-changed=./bindgen_wrapper.h");
 
     // Regenerate the wrapper
     Command::new("bash")
@@ -24,6 +25,7 @@ fn main() {
         .ctypes_prefix("core::ffi")
         // `core` instead of `libstd`
         .use_core()
+        .derive_default(true)
         // Make an actual enum for this type
         .rustified_enum("nk_gpu_dev_bit_blit_op")
         .rust_target(bindgen::RustTarget::Nightly)

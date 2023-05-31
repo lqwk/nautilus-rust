@@ -1,6 +1,9 @@
-pub use alloc::string::String;
-pub use alloc::sync::Arc;
-pub use alloc::vec::Vec;
+pub use alloc::{
+    vec::Vec,
+    boxed::Box,
+    string::String,
+    sync::Arc
+};
 
 pub(crate) use crate::kernel::shell::register_shell_command;
 pub(crate) use crate::kernel::print::{vc_print, vc_println, make_logging_macros};

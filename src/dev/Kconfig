@@ -187,6 +187,23 @@ config VIRTIO_GPU
     help
       Adds the Virtio GPU Driver
 
+choice
+    prompt "Select a Virtio GPU driver"
+    default C_VIRTIO_GPU if VIRTIO_GPU
+    depends on VIRTIO_GPU
+
+config C_VIRTIO_GPU
+    bool "C Virtio GPU driver"
+    help
+      Enable the C Virtio GPU driver.
+
+config RUST_VIRTIO_GPU
+    bool "Rust Virtio GPU driver"
+    help
+      Enable the Rust Virtio GPU driver.
+
+endchoice
+
 config DEBUG_VIRTIO_GPU
     bool "Debug Virtio GPU"
     depends on DEBUG_PRINTS && VIRTIO_GPU

@@ -41,4 +41,5 @@ mod parport;
 mod async_demo;
 mod thread_demo;
 mod task;
-mod virtio;
+#[cfg_accessible(kernel::bindings::NAUT_CONFIG_RUST_VIRTIO_GPU)]
+mod virtio_gpu;

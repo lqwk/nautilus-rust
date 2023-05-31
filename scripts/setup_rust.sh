@@ -13,5 +13,8 @@ rustup toolchain install nightly --component rust-src
 # install bindgen dependencies
 apt install llvm-dev libclang-dev clang
 
+# also need this for bindgen to understand <stddint.h>
+sudo apt-get install gcc-multilib
+
 # install bindgen for generating rust bindings
 cargo install bindgen

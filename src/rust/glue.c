@@ -4,8 +4,6 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/thread.h>
 
-// parport
-
 // direct wrappers around inline functions and macros
 
 void _glue_log_print(char* s) {
