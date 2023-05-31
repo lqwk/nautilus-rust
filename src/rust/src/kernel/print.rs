@@ -149,10 +149,10 @@ macro_rules! with_dollar_sign {
 /// is analogous to the C code:
 ///
 /// ```
-/// #define DEBUG(fmt, args...) DEBUG_PRINT("e1000_pci: " fmt, ##args)
-/// #define ERROR(fmt, args...) ERROR_PRINT("e1000_pci: " fmt, ##args)
-/// #define WARN(fmt, args...)  WARN_PRINT("e1000_pci: " fmt, ##args)
-/// #define INFO(fmt, args...)  INFO_PRINT("e1000_pci: " fmt, ##args)
+/// #define DEBUG(fmt, args...) DEBUG_PRINT("example: " fmt, ##args)
+/// #define ERROR(fmt, args...) ERROR_PRINT("example: " fmt, ##args)
+/// #define WARN(fmt, args...)  WARN_PRINT("example: " fmt, ##args)
+/// #define INFO(fmt, args...)  INFO_PRINT("example: " fmt, ##args)
 /// ```
 macro_rules! make_logging_macros {
     ($prefix:expr) => {

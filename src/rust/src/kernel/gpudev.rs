@@ -128,7 +128,7 @@ pub type Font = bindings::nk_gpu_dev_font_t;
 /// A Nautilus GPU device.
 pub trait GpuDev {
     /// The state associated with the GPU device.
-    type State: Send + Sync;
+    type State: Send + 'static;
 
     // gpudev-specific interface - set to zero if not available
     // an interface either succeeds (returns zero) or fails (returns -1)

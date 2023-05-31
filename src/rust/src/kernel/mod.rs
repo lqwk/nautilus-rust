@@ -13,13 +13,12 @@ pub mod gpudev;
 pub mod shell;
 pub mod print;
 pub mod error;
-pub mod utils;
 pub mod timer;
+pub mod thread;
 
 #[panic_handler]
 pub fn panic(info: &PanicInfo) -> ! {
     vc_println!("{}", info);
-
     // SAFETY: FFI call.
     //
     // We don't need to pass the panic message here,
