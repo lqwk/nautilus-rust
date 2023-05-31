@@ -281,7 +281,7 @@ impl<C: CharDev> Registration<C> {
 
     /// Gets the name of the character device.
     pub fn name(&self) -> &str {
-        self.0.name.to_str().expect("Name is not valid UTF-8.")
+        self.0.name.to_str().expect("Name cannot contain internal null bytes.")
     }
 }
 

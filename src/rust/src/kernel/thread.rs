@@ -48,7 +48,9 @@
 //!
 //! # Thread-local storage
 //!
-//! TODO
+//! Thread local storage is not currently implemented. It would be nice to have
+//! a TLS API similar to the standard library, but using Nautilus' existing
+//! thread local storage C functions.
 
 use alloc::{boxed::Box, ffi::CString, string::String};
 use core::{ffi::c_void, cell::UnsafeCell, mem::MaybeUninit, time::Duration};
@@ -136,9 +138,8 @@ impl Builder {
 
     /// Names the thread-to-be.
     ///
-    /// The name should be not contain null bytes (`\0`), and must be valid UTF-8.
-    /// Names greater than Nautilus' `MAX_THREAD_NAME - 1` (currenly `32 - 1 == 31`)
-    /// will be truncated.
+    /// The name should be not contain internal null bytes (`\0`). Names greater than
+    /// Nautilus' `MAX_THREAD_NAME - 1` (currenly `32 - 1 == 31`) will be truncated.
     pub fn name(mut self, name: String) -> Builder {
         self.name = Some(name);
         self
@@ -179,8 +180,7 @@ impl Builder {
     ///
     /// # Panics
     /// 
-    /// Panics if a thread name was set and it contained null bytes or was invalid
-    /// UTF-8.
+    /// Panics if a thread name was set and it contained internal null bytes.
     pub fn spawn<F, T>(self, f: F) -> Result<JoinHandle<F, T>>
     where
         F: FnMut() -> T + Send + 'static,
@@ -231,7 +231,7 @@ impl Builder {
         let name_ptr = name
             .map(|n| {
                 CString::new(n)
-                    .expect("Name is not valid UTF-8.")
+                    .expect("Name cannot contain internal null bytes.")
                     .into_raw()
             })
             .unwrap_or(core::ptr::null_mut());
@@ -270,7 +270,7 @@ impl Builder {
 /// thread function and its output is forgotten and cannot be deallocated.
 /// 
 /// This struct is created by the [`thread::spawn`][spawn] function and the
-/// `thread::Builder::spawn` method.
+/// [`thread::Builder::spawn`][Builder::spawn] method.
 #[derive(Debug)]
 pub struct JoinHandle<F, T> {
     id: ThreadId,

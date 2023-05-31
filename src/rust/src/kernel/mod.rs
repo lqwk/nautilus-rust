@@ -13,7 +13,6 @@ pub mod gpudev;
 pub mod shell;
 pub mod print;
 pub mod error;
-pub mod utils;
 pub mod timer;
 pub mod thread;
 
