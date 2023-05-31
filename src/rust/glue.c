@@ -3,6 +3,7 @@
 #include <nautilus/vc.h>
 #include <nautilus/spinlock.h>
 #include <nautilus/thread.h>
+#include <dev/virtio_pci.h>
 
 // direct wrappers around inline functions and macros
 
@@ -51,4 +52,16 @@ void irq_restore(uint8_t iflag) {
 
 void glue_yield() {
     nk_yield();
+}
+
+void _glue_mbarrier() {
+    mbarrier();
+}
+
+void _glue_virtio_pci_atomic_store_u16(uint16_t* destptr, uint16_t value) {
+    virtio_pci_atomic_store(destptr, value);
+}
+
+uint16_t _glue_virtio_pci_atomic_load_u16(uint16_t* srcptr) {
+    return virtio_pci_atomic_load(srcptr);
 }
