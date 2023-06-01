@@ -4,6 +4,7 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/thread.h>
 #include <dev/virtio_pci.h>
+#include <../include/dev/vga.h>
 
 // direct wrappers around inline functions and macros
 
@@ -64,4 +65,12 @@ void _glue_virtio_pci_atomic_store_u16(uint16_t* destptr, uint16_t value) {
 
 uint16_t _glue_virtio_pci_atomic_load_u16(uint16_t* srcptr) {
     return virtio_pci_atomic_load(srcptr);
+}
+
+void _glue_vga_copy_out(void* dest, uint32_t n) {
+    vga_copy_out(dest, n);
+}
+
+void _glue_vga_copy_in(void* src, uint32_t n) {
+    vga_copy_in(src, n);
 }
