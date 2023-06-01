@@ -15,7 +15,8 @@ make_logging_macros!("virtio_gpu", NAUT_CONFIG_DEBUG_VIRTIO_GPU);
 
 const VIRTIO_GPU_MAX_SCANOUTS: usize = 16;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(i32)]
 enum VirtioGpuCtrlType {
     GetDisplayInfo = 0x0100,
     ResourceCreate2D,
@@ -60,7 +61,8 @@ impl Default for VirtioGpuCtrlType {
     }
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
+#[repr(C)]
 struct CtrlHdr {
     type_: VirtioGpuCtrlType,
     flags: u32,
@@ -70,6 +72,7 @@ struct CtrlHdr {
 }
 
 #[derive(Default, Copy, Clone)]
+#[repr(C)]
 struct GpuRect {
     x: u32,
     y: u32,
@@ -78,6 +81,7 @@ struct GpuRect {
 }
 
 #[derive(Default, Copy, Clone)]
+#[repr(C)]
 struct DisplayOne {
     r: GpuRect,
     enabled: u32,
@@ -85,6 +89,7 @@ struct DisplayOne {
 }
 
 #[derive(Default, Copy, Clone)]
+#[repr(C)]
 struct RespDisplayInfo {
     hdr: CtrlHdr,
     pmodes: [DisplayOne; VIRTIO_GPU_MAX_SCANOUTS],
@@ -203,19 +208,14 @@ impl VirtioGpuDev {
         disp_info_req.type_ = VirtioGpuCtrlType::GetDisplayInfo;
 
         unsafe {
-            transact_rw(
-                &mut *self.virtio_dev,
-                0,
-                &[disp_info_req],
-                &mut [self.disp_info_resp], // MATTHEW
-            )?; // check ? operator
+            transact_rw(&mut *self.virtio_dev, 0, &disp_info_req, &mut self.disp_info_resp)?;
         }
 
-        // CHECK RESP MACRO????
+        check_response(&self.disp_info_resp.hdr, VirtioGpuCtrlType::OkDisplayInfo, "Failed to get display info")?;
 
         for (i, mode) in self.disp_info_resp.pmodes.iter().enumerate() {
             if mode.enabled != 0 {
-                vc_println!("scanout (monitor) {} has info: x={}, y={}, {} by {} flags=0x{} enabled={}",
+                debug!("scanout (monitor) {} has info: x={}, y={}, {} by {} flags=0x{} enabled={}",
                     i,
                     mode.r.x,
                     mode.r.y,
@@ -249,15 +249,16 @@ impl gpudev::GpuDev for VirtioGpuDev {
     type State = State;
 
     fn get_available_modes(state: &Self::State, modes: &mut [VideoMode]) -> Result<usize> { 
-        // let state = state.lock();
+        debug!("get_available_modes");
 
+        let mut state = state.lock();
 
         if modes.len() < 2 {
             error!("Must provide at least two mode slots\n");
             return Err(-1);
         }
-     
-        if state.lock().update_modes().is_err() {
+
+        if state.update_modes().is_err() {
             error!("Cannot update modes\n");
             return Err(-1);
 
@@ -267,23 +268,27 @@ impl gpudev::GpuDev for VirtioGpuDev {
         let limit = if modes.len() > 16 { 15 } else { modes.len() - 1 };
         let mut cur: usize = 0;
 
-        
-        modes[cur] = state.lock().gen_mode(0);
+        modes[cur] = state.gen_mode(0);
         cur += 1;
 
         // graphics modes
         for i in 0..16 {
-            if cur < limit {
+            if cur >= limit {
                 break;
             }
-            modes[cur] = state.lock().gen_mode(i+1);
-            cur += 1;
+            if state.disp_info_resp.pmodes[i].enabled != 0 {
+                debug!("filling out entry {cur} with scanout info {i}");
+                modes[cur] = state.gen_mode(i + 1);
+                cur += 1;
+            }
         }
+
 
         Ok(cur)
     }
 
     fn get_mode(state: &Self::State) -> Result<VideoMode> {
+        debug!("get_mode");
 
         let state = state.lock();
         Ok(state.gen_mode(state.cur_mode))
@@ -300,11 +305,11 @@ impl gpudev::GpuDev for VirtioGpuDev {
         // let state = state.lock();
         let mode_num = mode.mode_data as usize;
 
-        info!("set mode on virtio-gpu0"); // can we access name from InternalReg
+        debug!("set mode on virtio-gpu0"); // can we access name from InternalReg
 
         if state.lock().cur_mode == 0 {
             unsafe { _glue_vga_copy_out(state.lock().text_snapshot.as_ptr() as _, 80 * 25 * 2); } // needs to be mutable?
-            info!("copy out of text mode data complete");
+            debug!("copy out of text mode data complete");
         }
 
         if state.lock().reset().is_err() {
@@ -312,11 +317,11 @@ impl gpudev::GpuDev for VirtioGpuDev {
             return Err(-1);
         } 
 
-        info!("reset complete");
+        debug!("reset complete");
         if mode_num == 0 {
             unsafe {_glue_vga_copy_in(state.lock().text_snapshot.as_ptr() as _, 80 * 25 * 2); }
-            info!("copy in of text mode data complete");
-            info!("switch to text mode complete");
+            debug!("copy in of text mode data complete");
+            debug!("switch to text mode complete");
             return Ok(());
         }
 
@@ -333,7 +338,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         };
         let create_2d_resp = CtrlHdr::default();
 
-        info!("doing transaction to create 2D screen");
+        debug!("doing transaction to create 2D screen");
 
         unsafe {
             transact_rw(
@@ -346,13 +351,13 @@ impl gpudev::GpuDev for VirtioGpuDev {
 
         // CHECK_RESP?
 
-        info!("transaction complete");
+        debug!("transaction complete");
 
         // 3. we would create a framebuffer that we can write pixels into
         let fb_len: usize = (pm.r.width * pm.r.height * core::mem::size_of::<Pixel>() as u32) as usize;
         let mut frame_buffer = Box::new([Pixel::default()]);
         state.lock().frame_buffer = Some(frame_buffer);
-        info!("allocated screen framebuffer of length {}", fb_len); // may not need fb_len at all, unless for debug
+        debug!("allocated screen framebuffer of length {}", fb_len); // may not need fb_len at all, unless for debug
 
         // now create a description of it in a bounding box
         state.lock().frame_box = Rect {
@@ -374,7 +379,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         // A typical driver would fill it with zeros (black screen), but we
         // might want to put something more exciting there.
 
-        info!("filling framebuffer with initial screen");
+        debug!("filling framebuffer with initial screen");
 
         // 5. Now we need to associate our framebuffer (step 4) with our resource (step 2)
 
@@ -393,7 +398,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         };
         let backing_resp = CtrlHdr::default();
 
-        info!("doing transaction to associate framebuffer with screen resource");
+        debug!("doing transaction to associate framebuffer with screen resource");
 
         if unsafe {
             transact_rrw(
@@ -408,7 +413,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
             return Err(-1);
         }
         // CHECK_RESP?
-        info!("transaction complete");
+        debug!("transaction complete");
 
         // 6. Now we need to associate our resource (step 2) with the scanout (step 1)
         //    use mode_num-1 as the scanout ID
@@ -424,7 +429,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         };
         let setso_resp = CtrlHdr::default();
 
-        info!("doing transaction to associate screen resource with the scanout");
+        debug!("doing transaction to associate screen resource with the scanout");
         if unsafe {
             transact_rw(
                 &mut *state.lock().virtio_dev,
@@ -437,7 +442,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
             return Err(-1);
         }
         // CHECK_RESP?
-        info!("transaction complete");
+        debug!("transaction complete");
 
         // Now let's capture our mode number to indicate we are done with setup
         // and make subsequent calls aware of our state
@@ -580,11 +585,15 @@ unsafe fn transact_base(dev: &mut bindings::virtio_pci_dev, qidx: u16, didx: u16
         // make sure it is running
         _glue_virtio_pci_atomic_store_u16(&mut (*dev.common).queue_enable as *mut _, 1);
 
+        debug_dump_descriptors(vq, 0, 8);
+
         // ask the virtio-pci subsystem we live in to actually do the
         // notification write
         bindings::virtio_pci_virtqueue_notify(dev as *mut _, qidx);
 
         // The device has our request now
+
+        debug!("request initiated");
 
         // Satisfy the borrow checker by shadowing the old borrow
         let virtq = &mut (dev.virtq[qidx as usize]);
@@ -601,31 +610,35 @@ unsafe fn transact_base(dev: &mut bindings::virtio_pci_dev, qidx: u16, didx: u16
         // now we are done with the descriptor chain, so ask
         // the virtio-pci system to clean it up for us
         if bindings::virtio_pci_desc_chain_free(dev as *mut _,qidx,didx) != 0 {
-            vc_println!("Failed to free descriptor chain");
+            error!("Failed to free descriptor chain");
             return Err(-1);
         }
     }
 
+    debug!("transaction complete");
+
     Ok(())
 }
 
-unsafe fn transact_rw<T1, T2>(
+unsafe fn transact_rw<R, W>(
     dev: &mut bindings::virtio_pci_dev,
     qidx: u16,
-    req: &[T1],
-    resp: &mut [T2]
+    req: &R,
+    resp: &mut W
 ) -> Result {
     let mut desc_idx = [0_u16; 2];
-    let reqlen = (core::mem::size_of::<T1>() * req.len()) as u32;
-    let resplen = (core::mem::size_of::<T2>() * resp.len()) as u32;
+    let reqlen = core::mem::size_of::<R>() as u32;
+    let resplen = core::mem::size_of::<W>() as u32;
 
     unsafe {
         // allocate a two element descriptor chain, the descriptor
         // numbers will be placed in the desc_idx array.
         if bindings::virtio_pci_desc_chain_alloc(dev as *mut _, qidx, desc_idx.as_mut_ptr(), 2) != 0 {
-            vc_println!("Failed to allocate descriptor chain");
+            error!("Failed to allocate descriptor chain");
             return Err(-1);
         }
+
+        debug!("allocated chain {} -> {}", desc_idx[0], desc_idx[1]);
 
         // Now get pointers to the specific descriptors in the virtq struct
         // (which is shared with the hardware)
@@ -636,31 +649,52 @@ unsafe fn transact_rw<T1, T2>(
 
         // this is the "read" part - the request
         // first element of the linked list
-        (*desc[0]).addr = req.as_ptr() as u64;
+        (*desc[0]).addr = req as *const _ as u64;
         (*desc[0]).len = reqlen;
         (*desc[0]).flags |= 0;
         (*desc[0]).next = desc_idx[1];  // next pointer is next descriptor
                                         //
         // this is the "write" part - the response
         // this is where we want the device to put the response
-        (*desc[1]).addr = resp.as_ptr() as u64;
+        (*desc[1]).addr = resp as *mut _ as u64;
         (*desc[1]).len = resplen;
         (*desc[1]).flags |= bindings::VIRTQ_DESC_F_WRITE as u16;
         (*desc[1]).next = 0;            // next pointer is null   
     }
 
     unsafe { transact_base(dev, qidx, desc_idx[0]) }
-    // Ok(())
 }
 
-fn transact_rrw<R1, R2>(
+unsafe fn transact_rrw<R1, R2, W>(
     dev: *mut bindings::virtio_pci_dev,
     qidx: u16,
     req: &[R1],
     more: &[R2],
-    resp: &mut [CtrlHdr]
+    resp: &mut [W]
 ) -> Result {
     unimplemented!();
+}
+
+fn debug_dump_descriptors(vq: &bindings::virtq, start: usize, count: usize) {
+    for i in start..(start + count) {
+        unsafe {
+            let addr  = vq.desc.offset(i as _).read().addr;
+            let len   = vq.desc.offset(i as _).read().len;
+            let flags = vq.desc.offset(i as _).read().flags;
+            let next  = vq.desc.offset(i as _).read().next;
+            debug!("vq[{}] = {:#x} len={} flags={:#x} next={}", i, addr, len, flags, next);
+        }
+    }
+}
+
+fn check_response(hdr: &CtrlHdr, expected: VirtioGpuCtrlType, error_message: &str) -> Result {
+    if hdr.type_ == expected {
+        Ok(())
+    } else {
+        debug!("hdr = {:?}", hdr);
+        error!("{}", error_message);
+        Err(-1)
+    }
 }
 
 #[no_mangle]
@@ -672,13 +706,13 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
 
     // Acknowledge to the device that we see it
     if unsafe { bindings::virtio_pci_ack_device(virtio_dev) } != 0 {
-        vc_println!("Could not acknowledge device");
+        error!("Could not acknowledge device");
         return -1;
     }
 
     // Ask the device for what features it supports
     if unsafe { bindings::virtio_pci_read_features(virtio_dev) } != 0 {
-        vc_println!("Unable to read device features");
+        error!("Unable to read device features");
         return -1;
     }
 
@@ -686,7 +720,7 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
     //
     // We will not support either VIRGL (3D) or EDID (better display info) for now.
     if unsafe { bindings::virtio_pci_write_features(virtio_dev, 0) } != 0 {
-        vc_println!("Unable to write device features");
+        error!("Unable to write device features");
         return -1;
     }
 
@@ -694,7 +728,7 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
     // has two of them.  The first is for most requests/responses,
     // while the second is for (mouse) cursor updates and movement
     if unsafe { bindings::virtio_pci_virtqueue_init(virtio_dev) } != 0 {
-        vc_println!("failed to initialize virtqueues");
+        error!("failed to initialize virtqueues");
         return -1;
     }
 
