@@ -140,6 +140,25 @@ struct SetScanout {
     resource_id: u32,
 }
 
+#[derive(Default)]
+#[repr(C)]
+struct TransferToHost2D {
+    hdr: CtrlHdr,
+    r: GpuRect,
+    offset: u64,
+    resource_id: u32,
+    padding: u32
+}
+
+#[derive(Default)]
+#[repr(C)]
+struct ResourceFlush {
+    hdr: CtrlHdr,
+    r: GpuRect,
+    resource_id: u32,
+    padding: u32
+}
+
 struct VirtioGpuDev {
     gpu_dev: Option<gpudev::Registration<Self>>,
     virtio_dev: *mut bindings::virtio_pci_dev,
@@ -264,14 +283,14 @@ impl gpudev::GpuDev for VirtioGpuDev {
     fn get_available_modes(state: &Self::State, modes: &mut [VideoMode]) -> Result<usize> { 
         debug!("get_available_modes");
 
-        let mut state = state.lock();
+        let mut d = state.lock();
 
         if modes.len() < 2 {
             error!("Must provide at least two mode slots\n");
             return Err(-1);
         }
 
-        if state.update_modes().is_err() {
+        if d.update_modes().is_err() {
             error!("Cannot update modes\n");
             return Err(-1);
 
@@ -281,7 +300,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         let limit = if modes.len() > 16 { 15 } else { modes.len() - 1 };
         let mut cur: usize = 0;
 
-        modes[cur] = state.gen_mode(0);
+        modes[cur] = d.gen_mode(0);
         cur += 1;
 
         // graphics modes
@@ -289,9 +308,9 @@ impl gpudev::GpuDev for VirtioGpuDev {
             if cur >= limit {
                 break;
             }
-            if state.disp_info_resp.pmodes[i].enabled != 0 {
+            if d.disp_info_resp.pmodes[i].enabled != 0 {
                 debug!("filling out entry {cur} with scanout info {i}");
-                modes[cur] = state.gen_mode(i + 1);
+                modes[cur] = d.gen_mode(i + 1);
                 cur += 1;
             }
         }
@@ -303,8 +322,8 @@ impl gpudev::GpuDev for VirtioGpuDev {
     fn get_mode(state: &Self::State) -> Result<VideoMode> {
         debug!("get_mode");
 
-        let state = state.lock();
-        Ok(state.gen_mode(state.cur_mode))
+        let d = state.lock();
+        Ok(d.gen_mode(d.cur_mode))
     }
     
     
@@ -315,22 +334,23 @@ impl gpudev::GpuDev for VirtioGpuDev {
         state: &Self::State, 
         mode: &VideoMode
     ) -> Result {
-        let mut state = state.lock();
+        {
+        let mut d = state.lock();
         let mode_num = mode.mode_data as usize;
 
-        debug!("set mode on {}", state.gpu_dev.as_ref().unwrap().name());
+        debug!("set mode on {}", d.gpu_dev.as_ref().unwrap().name());
 
         // 1. First, clean up the current mode and get us back to
         //    the basic text mode
 
-        if state.cur_mode == 0 {
+        if d.cur_mode == 0 {
             // we are in VGA text mode - capture the text on screen
-            unsafe { _glue_vga_copy_out(state.text_snapshot.as_mut_ptr(), 80 * 25 * 2); }
+            unsafe { _glue_vga_copy_out(d.text_snapshot.as_mut_ptr(), 80 * 25 * 2); }
             debug!("copy out of text mode data complete");
         }
 
         // reset ourselves back to text mode before doing a switch
-        if state.reset().is_err() {
+        if d.reset().is_err() {
             error!("Cannot reset device");
             return Err(-1);
         } 
@@ -340,7 +360,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         if mode_num == 0 {
             // we are switching back to VGA text mode - restore
             // the text on the screen
-            unsafe {_glue_vga_copy_in(state.text_snapshot.as_ptr() as _, 80 * 25 * 2); }
+            unsafe {_glue_vga_copy_in(d.text_snapshot.as_ptr() as _, 80 * 25 * 2); }
             debug!("copy in of text mode data complete");
             debug!("switch to text mode complete");
             return Ok(());
@@ -349,7 +369,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         // if we got here, we are switching to a graphics mode
 
         // we are switching to this graphics mode
-        let pm = &state.disp_info_resp.pmodes[mode_num - 1] as *const DisplayOne as *mut DisplayOne;
+        let pm = &d.disp_info_resp.pmodes[mode_num - 1] as *const DisplayOne as *mut DisplayOne;
 
         // 2. we next create a resource for the screen
         //    use SCREEN_RID as the ID
@@ -368,7 +388,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
 
         unsafe {
             transact_rw(
-                &mut *state.virtio_dev,
+                &mut *d.virtio_dev,
                 0,
                 &create_2d_req,
                 &mut create_2d_resp,
@@ -383,14 +403,14 @@ impl gpudev::GpuDev for VirtioGpuDev {
         let num_pixels = unsafe { (pm.read().r.width * pm.read().r.height) as usize };
 
         let frame_buffer = (vec![Pixel::default(); num_pixels]).into_boxed_slice();
-        state.frame_buffer = Some(frame_buffer);
+        d.frame_buffer = Some(frame_buffer);
 
 
         let fb_length = num_pixels * core::mem::size_of::<Pixel>();
         debug!("allocated screen framebuffer of length {fb_length}");
 
         // now create a description of it in a bounding box
-        state.frame_box = Rect {
+        d.frame_box = Rect {
             x: 0,
             y: 0,
             width: unsafe { pm.read().r.width },
@@ -398,7 +418,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         };
 
         // make the clipping box the entire screen
-        state.clipping_box = Rect {
+        d.clipping_box = Rect {
             x: 0,
             y: 0,
             width: unsafe { pm.read().r.width },
@@ -421,14 +441,14 @@ impl gpudev::GpuDev for VirtioGpuDev {
         backing_req.resource_id = SCREEN_RID;
         backing_req.nr_entries = 1;
 
-        backing_entry.addr = state.frame_buffer.as_ref().unwrap().as_ptr() as *const c_void as u64;
+        backing_entry.addr = d.frame_buffer.as_ref().unwrap().as_ptr() as *const c_void as u64;
         backing_entry.length = fb_length as _;
 
 
         debug!("doing transaction to associate framebuffer with screen resource");
         unsafe {
             transact_rrw(
-                &mut *state.virtio_dev,
+                &mut *d.virtio_dev,
                 0,
                 &backing_req,
                 &backing_entry,
@@ -456,7 +476,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         debug!("doing transaction to associate screen resource with the scanout");
         unsafe {
             transact_rw(
-                &mut *state.virtio_dev,
+                &mut *d.virtio_dev,
                 0,
                 &setso_req,
                 &mut setso_resp,
@@ -471,9 +491,11 @@ impl gpudev::GpuDev for VirtioGpuDev {
 
         // Now let's capture our mode number to indicate we are done with setup
         // and make subsequent calls aware of our state
-        state.cur_mode = mode_num;
+        d.cur_mode = mode_num;
 
-        // Self::flush(state)?;
+        } // lock guard is dropped
+
+        Self::flush(state)?;
 
         Ok(())
     }
@@ -486,7 +508,63 @@ impl gpudev::GpuDev for VirtioGpuDev {
 
     // flush - wait until all preceding drawing commands are visible by the user
     fn flush(state: &Self::State) -> Result {
-        unimplemented!();
+        debug!("flush");
+
+        let mut d = state.lock();
+        if d.cur_mode == 0 {
+            debug!("ignoring flush for text mode");
+            return Ok(());
+        }
+
+        // First, tell the GPU to DMA from our framebuffer to the resource
+
+        let mut xfer_req = TransferToHost2D::default();
+        let mut xfer_resp = CtrlHdr::default();
+
+        xfer_req.hdr.type_ = VirtioGpuCtrlType::TransferToHost2D;
+        xfer_req.r = d.disp_info_resp.pmodes[d.cur_mode - 1].r;
+        xfer_req.offset = 0;
+        xfer_req.resource_id = SCREEN_RID;
+
+        debug!("beginning transaction to tell GPU to DMA from framebuffer\n");
+
+        unsafe {
+            transact_rw(
+                &mut *d.virtio_dev,
+                0,
+                &xfer_req,
+                &mut xfer_resp,
+            ).inspect_err(|_| error!("failed to tell GPU to DMA from framebuffer (transaction failed)"))?;
+        }
+
+        check_response(&xfer_resp, VirtioGpuCtrlType::OkNoData, "failed to tell GPU to DMA from framebuffer")?;
+        debug!("transaction complete");
+
+        // Second, tell the GPU to copy from the resource to the screen
+        let mut flush_req = ResourceFlush::default();
+        let mut flush_resp = CtrlHdr::default();
+
+        flush_req.hdr.type_ = VirtioGpuCtrlType::ResourceFlush;
+        flush_req.r = d.disp_info_resp.pmodes[d.cur_mode - 1].r;
+        flush_req.resource_id = SCREEN_RID;
+
+        debug!("beginning transaction to tell GPU to copy from resource to screen");
+        unsafe {
+            transact_rw(
+                &mut *d.virtio_dev,
+                0,
+                &flush_req,
+                &mut flush_resp,
+            ).inspect_err(|_| error!("failed to tell GPU to copy from resource to screen (transaction failed)"))?;
+        }
+
+        check_response(&flush_resp,
+                       VirtioGpuCtrlType::OkNoData,
+                       "failed to tell GPU to copy from resource to screen\n")?;
+        debug!("transaction complete");
+
+        // User should now see the changes
+        Ok(())
     }
 
     // text mode drawing commands
