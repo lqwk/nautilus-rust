@@ -199,6 +199,7 @@ config C_VIRTIO_GPU
 
 config RUST_VIRTIO_GPU
     bool "Rust Virtio GPU driver"
+    depends on RUST_SUPPORT
     help
       Enable the Rust Virtio GPU driver.
 

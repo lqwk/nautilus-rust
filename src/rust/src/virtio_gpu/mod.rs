@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use core::ffi::{c_void, c_int};
+use core::cell::RefCell;
 
 use crate::prelude::*;
 use crate::kernel::{
@@ -8,7 +9,6 @@ use crate::kernel::{
     gpudev,
     gpudev::{VideoMode, Char, Coordinate, Font, Rect, BitBlitOp, Pixel, Region, Bitmap},
     print::make_logging_macros,
-    sync::IRQLock,
 };
 
 make_logging_macros!("virtio_gpu", NAUT_CONFIG_DEBUG_VIRTIO_GPU);
@@ -286,7 +286,7 @@ impl VirtioGpuDev {
     }
 }
 
-type State = IRQLock<VirtioGpuDev>;
+type State = RefCell<VirtioGpuDev>;
 unsafe impl Send for VirtioGpuDev {}
 
 extern "C" {
@@ -295,13 +295,12 @@ extern "C" {
 }
 
 impl gpudev::GpuDev for VirtioGpuDev {
-
     type State = State;
 
     fn get_available_modes(state: &Self::State, modes: &mut [VideoMode]) -> Result<usize> { 
         debug!("get_available_modes");
 
-        let mut d = state.lock();
+        let mut d = state.borrow_mut();
 
         if modes.len() < 2 {
             error!("Must provide at least two mode slots\n");
@@ -340,7 +339,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
     fn get_mode(state: &Self::State) -> Result<VideoMode> {
         debug!("get_mode");
 
-        let d = state.lock();
+        let d = state.borrow_mut();
         Ok(d.gen_mode(d.cur_mode))
     }
     
@@ -353,7 +352,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         mode: &VideoMode
     ) -> Result {
         {
-        let mut d = state.lock();
+        let mut d = state.borrow_mut();
         let mode_num = mode.mode_data as usize;
 
         debug!("set mode on {}", d.name());
@@ -528,7 +527,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
     fn flush(state: &Self::State) -> Result {
         debug!("flush");
 
-        let mut d = state.lock();
+        let mut d = state.borrow_mut();
         if d.cur_mode == 0 {
             debug!("ignoring flush for text mode");
             return Ok(());
@@ -598,7 +597,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
     // graphics mode drawing commands
     // confine drawing to this box or region
     fn graphics_set_clipping_box(state: &Self::State, rect: Option<&Rect>) -> Result {
-        let mut d = state.lock();
+        let mut d = state.borrow_mut();
 
         debug!("graphics_set_clipping_box on {}: {:?})\n", d.name(), rect);
 
@@ -648,7 +647,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         bitmap: &Bitmap, 
         op: BitBlitOp
     ) -> Result {
-        let mut d = state.lock();
+        let mut d = state.borrow_mut();
         debug!("graphics_fill_box_with_bitmap on {}", d.name());
 
         for i in 0..(rect.width) {
@@ -880,7 +879,7 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
     info!("init");
 
     // Allocate a default state structure for this device
-    let dev = Arc::new(IRQLock::new(VirtioGpuDev::default()));
+    let dev = Arc::new(RefCell::new(VirtioGpuDev::default()));
 
     // Acknowledge to the device that we see it
     if unsafe { bindings::virtio_pci_ack_device(virtio_dev) } != 0 {
@@ -912,7 +911,7 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
 
     // Associate our state with the general virtio-pci device structure,
     // and vice-versa:
-    let dev_ptr = &*dev.lock() as *const _ as *mut VirtioGpuDev;
+    let dev_ptr = &*dev.borrow_mut() as *const _ as *mut VirtioGpuDev;
     unsafe {
         (*virtio_dev).state = dev_ptr as *mut _;
         (*virtio_dev).teardown = None;
