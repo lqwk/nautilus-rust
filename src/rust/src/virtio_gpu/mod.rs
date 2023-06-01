@@ -14,6 +14,7 @@ use crate::kernel::{
 make_logging_macros!("virtio_gpu", NAUT_CONFIG_DEBUG_VIRTIO_GPU);
 
 const VIRTIO_GPU_MAX_SCANOUTS: usize = 16;
+const SCREEN_RID: u32 = 42;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
@@ -44,15 +45,16 @@ enum VirtioGpuCtrlType {
     ErrInvalidParameter,
 }
 
+#[repr(u32)]
 enum VirtioGpuFormat {
-    B8G8R8A8Unorm  = 1 as _,
-    B8G8R8X8Unorm  = 2 as _,
-    A8R8G8B8Unorm  = 3 as _,
-    X8R8G8B8Unorm  = 4 as _,
-    R8G8B8A8Unorm  = 67 as _,
-    X8B8G8R8Unorm  = 68 as _,
-    A8B8G8R8Unorm  = 121 as _,
-    R8G8B8X8Unorm  = 134 as _,
+    B8G8R8A8Unorm  = 1,
+    B8G8R8X8Unorm  = 2,
+    A8R8G8B8Unorm  = 3,
+    X8R8G8B8Unorm  = 4,
+    R8G8B8A8Unorm  = 67,
+    X8B8G8R8Unorm  = 68,
+    A8B8G8R8Unorm  = 121,
+    R8G8B8X8Unorm  = 134,
 }
 
 impl Default for VirtioGpuCtrlType {
@@ -96,6 +98,7 @@ struct RespDisplayInfo {
 }
 
 #[derive(Default)]
+#[repr(C)]
 struct ResourceCreate2d {
     hdr: CtrlHdr,
     resource_id: u32,   // we need to supply the id, it cannot be zero
@@ -105,6 +108,7 @@ struct ResourceCreate2d {
 }
 
 #[derive(Default)]
+#[repr(C)]
 struct ResourceAttachBacking {
     hdr: CtrlHdr,
     resource_id: u32,
@@ -112,20 +116,23 @@ struct ResourceAttachBacking {
 }
 
 #[derive(Default)]
+#[repr(C)]
 struct ResourceDetachBacking {
     hdr: CtrlHdr,
     resource_id: u32,
     padding: u32,
 }
 
-// #[derive(Default)]
+#[derive(Default)]
+#[repr(C)]
 struct MemEntry {
-    addr: *const Box<[Pixel]>,
+    addr: u64,
     length: u32,
     padding: u32,
 }
 
 #[derive(Default)]
+#[repr(C)]
 struct SetScanout {
     hdr: CtrlHdr,
     r: GpuRect,
@@ -232,7 +239,13 @@ impl VirtioGpuDev {
     }
 
     fn reset(&mut self) -> Result {
-        unimplemented!();
+        if self.cur_mode != 0 {
+            error!("switching back from graphics mode is unimplemented");
+            Err(-1)
+        } else {
+            debug!("already in VGA compatibility mode (text mode)");
+            Ok(())
+        }
     }
 }
 
@@ -302,153 +315,165 @@ impl gpudev::GpuDev for VirtioGpuDev {
         state: &Self::State, 
         mode: &VideoMode
     ) -> Result {
-        // let state = state.lock();
+        let mut state = state.lock();
         let mode_num = mode.mode_data as usize;
 
-        debug!("set mode on virtio-gpu0"); // can we access name from InternalReg
+        debug!("set mode on {}", state.gpu_dev.as_ref().unwrap().name());
 
-        if state.lock().cur_mode == 0 {
-            unsafe { _glue_vga_copy_out(state.lock().text_snapshot.as_ptr() as _, 80 * 25 * 2); } // needs to be mutable?
+        // 1. First, clean up the current mode and get us back to
+        //    the basic text mode
+
+        if state.cur_mode == 0 {
+            // we are in VGA text mode - capture the text on screen
+            unsafe { _glue_vga_copy_out(state.text_snapshot.as_mut_ptr(), 80 * 25 * 2); }
             debug!("copy out of text mode data complete");
         }
 
-        if state.lock().reset().is_err() {
+        // reset ourselves back to text mode before doing a switch
+        if state.reset().is_err() {
             error!("Cannot reset device");
             return Err(-1);
         } 
 
         debug!("reset complete");
+
         if mode_num == 0 {
-            unsafe {_glue_vga_copy_in(state.lock().text_snapshot.as_ptr() as _, 80 * 25 * 2); }
+            // we are switching back to VGA text mode - restore
+            // the text on the screen
+            unsafe {_glue_vga_copy_in(state.text_snapshot.as_ptr() as _, 80 * 25 * 2); }
             debug!("copy in of text mode data complete");
             debug!("switch to text mode complete");
             return Ok(());
         }
 
-        let pm = state.lock().disp_info_resp.pmodes[mode_num - 1];
-        let create_2d_req = ResourceCreate2d {
-            hdr: CtrlHdr {
-                type_: VirtioGpuCtrlType::ResourceCreate2D,
-                ..Default::default()
-            },
-            resource_id: 42, // SCREEN_RID
-            format: VirtioGpuFormat::R8G8B8A8Unorm as u32,
-            width: pm.r.width,
-            height: pm.r.height,
-        };
-        let create_2d_resp = CtrlHdr::default();
+        // if we got here, we are switching to a graphics mode
+
+        // we are switching to this graphics mode
+        let pm = &state.disp_info_resp.pmodes[mode_num - 1] as *const DisplayOne as *mut DisplayOne;
+
+        // 2. we next create a resource for the screen
+        //    use SCREEN_RID as the ID
+
+        let mut create_2d_req = ResourceCreate2d::default();
+        let mut create_2d_resp = CtrlHdr::default();
+
+        create_2d_req.hdr.type_ = VirtioGpuCtrlType::ResourceCreate2D;
+        create_2d_req.resource_id = SCREEN_RID;
+        create_2d_req.format = VirtioGpuFormat::R8G8B8A8Unorm as u32;
+        create_2d_req.width = unsafe { pm.read().r.width };
+        create_2d_req.height = unsafe { pm.read().r.height };
+
 
         debug!("doing transaction to create 2D screen");
 
         unsafe {
             transact_rw(
-                &mut *state.lock().virtio_dev,
+                &mut *state.virtio_dev,
                 0,
-                &[create_2d_req],
-                &mut [create_2d_resp],
-            ).expect("failed to create 2D screen (transaction failed"); // will propogate error?
+                &create_2d_req,
+                &mut create_2d_resp,
+            ).inspect_err(|_| error!("failed to create 2D screen (transaction failed"))?;
         }
 
-        // CHECK_RESP?
-
+        check_response(&create_2d_resp, VirtioGpuCtrlType::OkNoData, "failed to create 2D screen")?;
         debug!("transaction complete");
 
         // 3. we would create a framebuffer that we can write pixels into
-        let fb_len: usize = (pm.r.width * pm.r.height * core::mem::size_of::<Pixel>() as u32) as usize;
-        let mut frame_buffer = Box::new([Pixel::default()]);
-        state.lock().frame_buffer = Some(frame_buffer);
-        debug!("allocated screen framebuffer of length {}", fb_len); // may not need fb_len at all, unless for debug
+
+        let num_pixels = unsafe { (pm.read().r.width * pm.read().r.height) as usize };
+
+        let frame_buffer = (vec![Pixel::default(); num_pixels]).into_boxed_slice();
+        state.frame_buffer = Some(frame_buffer);
+
+
+        let fb_length = num_pixels * core::mem::size_of::<Pixel>();
+        debug!("allocated screen framebuffer of length {fb_length}");
 
         // now create a description of it in a bounding box
-        state.lock().frame_box = Rect {
+        state.frame_box = Rect {
             x: 0,
             y: 0,
-            width: pm.r.width,
-            height: pm.r.height,
+            width: unsafe { pm.read().r.width },
+            height: unsafe { pm.read().r.height },
         };
 
         // make the clipping box the entire screen
-        state.lock().clipping_box = Rect {
+        state.clipping_box = Rect {
             x: 0,
             y: 0,
-            width: pm.r.width,
-            height: pm.r.height,
+            width: unsafe { pm.read().r.width },
+            height: unsafe { pm.read().r.height },
         };
 
         // 4. we should probably fill the framebuffer with some initial data
         // A typical driver would fill it with zeros (black screen), but we
         // might want to put something more exciting there.
 
-        debug!("filling framebuffer with initial screen");
+        // (the default pixel values are black, so we've already done this).
 
         // 5. Now we need to associate our framebuffer (step 4) with our resource (step 2)
 
-        let backing_req = ResourceAttachBacking {
-            hdr: CtrlHdr {
-                type_: VirtioGpuCtrlType::ResourceAttachBacking,
-                ..Default::default()
-            },
-            resource_id: 42, // SCREEN_RID
-            nr_entries: 1,
-        };
-        let backing_entry = MemEntry {
-            addr: state.lock().frame_buffer.as_ref().unwrap(),
-            length: fb_len as u32,
-            padding: 0,
-        };
-        let backing_resp = CtrlHdr::default();
+        let mut backing_req = ResourceAttachBacking::default();
+        let mut backing_entry = MemEntry::default();
+        let mut backing_resp = CtrlHdr::default();
+
+        backing_req.hdr.type_ = VirtioGpuCtrlType::ResourceAttachBacking;
+        backing_req.resource_id = SCREEN_RID;
+        backing_req.nr_entries = 1;
+
+        backing_entry.addr = state.frame_buffer.as_ref().unwrap().as_ptr() as *const c_void as u64;
+        backing_entry.length = fb_length as _;
+
 
         debug!("doing transaction to associate framebuffer with screen resource");
-
-        if unsafe {
+        unsafe {
             transact_rrw(
-                state.lock().virtio_dev,
+                &mut *state.virtio_dev,
                 0,
-                &[backing_req],
-                &[backing_entry],
-                &mut [backing_resp],
-            ).is_err()
-        } {
-            error!("failed to associate framebuffer with screen resource (transaction failed)");
-            return Err(-1);
-        }
-        // CHECK_RESP?
+                &backing_req,
+                &backing_entry,
+                &mut backing_resp,
+            )
+        }.inspect_err(|_| error!("failed to associate framebuffer with screen resource (transaction failed)"))?;
+
+        check_response(&backing_resp,
+                       VirtioGpuCtrlType::OkNoData,
+                       "failed to associate framebuffer with screen resource")?;
+
         debug!("transaction complete");
 
         // 6. Now we need to associate our resource (step 2) with the scanout (step 1)
         //    use mode_num-1 as the scanout ID
 
-        let setso_req = SetScanout {
-            hdr: CtrlHdr {
-                type_: VirtioGpuCtrlType::SetScanout,
-                ..Default::default()
-            },
-            r: pm.r,
-            scanout_id: mode_num as u32 - 1,
-            resource_id: 42, // SCREEN_RID
-        };
-        let setso_resp = CtrlHdr::default();
+        let mut setso_req = SetScanout::default();
+        let mut setso_resp = CtrlHdr::default();
+
+        setso_req.hdr.type_ = VirtioGpuCtrlType::SetScanout;
+        setso_req.resource_id = SCREEN_RID;
+        setso_req.r = unsafe { pm.read().r };
+        setso_req.scanout_id = mode_num as u32 - 1;
 
         debug!("doing transaction to associate screen resource with the scanout");
-        if unsafe {
+        unsafe {
             transact_rw(
-                &mut *state.lock().virtio_dev,
+                &mut *state.virtio_dev,
                 0,
-                &[setso_req],
-                &mut [setso_resp],
-            ).is_err()
-        } {
-            error!("failed to associate screen resource with the scanout (transaction failed)");
-            return Err(-1);
-        }
-        // CHECK_RESP?
+                &setso_req,
+                &mut setso_resp,
+            )
+        }.inspect_err(|_| error!("failed to associate screen resource with the scanout (transaction failed)"))?;
+
+        check_response(&setso_resp,
+                       VirtioGpuCtrlType::OkNoData,
+                       "failed to associate screen resource with the scanout")?;
+
         debug!("transaction complete");
 
         // Now let's capture our mode number to indicate we are done with setup
         // and make subsequent calls aware of our state
-        state.lock().cur_mode = mode_num;
-        // Self::flush(state)?;
+        state.cur_mode = mode_num;
 
+        // Self::flush(state)?;
 
         Ok(())
     }
@@ -666,13 +691,55 @@ unsafe fn transact_rw<R, W>(
 }
 
 unsafe fn transact_rrw<R1, R2, W>(
-    dev: *mut bindings::virtio_pci_dev,
+    dev: &mut bindings::virtio_pci_dev,
     qidx: u16,
-    req: &[R1],
-    more: &[R2],
-    resp: &mut [W]
+    req: &R1,
+    more: &R2,
+    resp: &mut W
 ) -> Result {
-    unimplemented!();
+    let mut desc_idx = [0_u16; 3];
+    let reqlen =  core::mem::size_of::<R1>() as u32;
+    let morelen = core::mem::size_of::<R2>() as u32;
+    let resplen = core::mem::size_of::<W>() as u32;
+
+    unsafe {
+        // allocate a two element descriptor chain, the descriptor
+        // numbers will be placed in the desc_idx array.
+        if bindings::virtio_pci_desc_chain_alloc(dev as *mut _, qidx, desc_idx.as_mut_ptr(), 3) != 0 {
+            error!("Failed to allocate descriptor chain");
+            return Err(-1);
+        }
+
+        debug!("allocated chain {} -> {} -> {}", desc_idx[0], desc_idx[1], desc_idx[2]);
+
+        // Now get pointers to the specific descriptors in the virtq struct
+        // (which is shared with the hardware)
+        let desc = [dev.virtq[qidx as usize].vq.desc.offset(desc_idx[0] as isize),
+                    dev.virtq[qidx as usize].vq.desc.offset(desc_idx[1] as isize),
+                    dev.virtq[qidx as usize].vq.desc.offset(desc_idx[2] as isize)];
+
+        // this is the "read" part - the request
+        // first element of the linked list
+        (*desc[0]).addr = req as *const _ as u64;
+        (*desc[0]).len = reqlen;
+        (*desc[0]).flags |= 0;
+        (*desc[0]).next = desc_idx[1];  // next pointer is next descriptor
+
+        // more readable data, but perhaps in a different, non-consecutive address
+        (*desc[1]).addr = more as *const _ as u64;
+        (*desc[1]).len = morelen;
+        (*desc[1]).flags |= 0;
+        (*desc[1]).next = desc_idx[2];  // next pointer is next descriptor
+
+        // this is the "write" part - the response
+        // this is where we want the device to put the response
+        (*desc[2]).addr = resp as *mut _ as u64;
+        (*desc[2]).len = resplen;
+        (*desc[2]).flags |= bindings::VIRTQ_DESC_F_WRITE as u16;
+        (*desc[2]).next = 0;            // next pointer is null   
+    }
+
+    unsafe { transact_base(dev, qidx, desc_idx[0]) }
 }
 
 fn debug_dump_descriptors(vq: &bindings::virtq, start: usize, count: usize) {

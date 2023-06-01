@@ -1,4 +1,5 @@
 pub use alloc::{
+    vec,
     vec::Vec,
     boxed::Box,
     string::String,
