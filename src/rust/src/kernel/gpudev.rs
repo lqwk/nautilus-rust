@@ -163,7 +163,7 @@ pub trait GpuDev {
 
     // graphics mode drawing commands
     // confine drawing to this box or region
-    fn graphics_set_clipping_box(state: &Self::State, rect: &Rect) -> Result;
+    fn graphics_set_clipping_box(state: &Self::State, rect: Option<&Rect>) -> Result;
 
     fn graphics_set_clipping_region(state: &Self::State, region: &Region) -> Result;
 
@@ -293,7 +293,7 @@ impl<G: GpuDev> Registration<G> {
         let state = unsafe { &*(raw_state as *const G::State) };
 
         // SAFETY: Caller ensures `raw_rect` is a valid pointer.
-        let rect = unsafe { &*raw_rect };
+        let rect = unsafe { raw_rect.as_ref() };
 
         G::graphics_set_clipping_box(state, rect).as_error_code()
     }

@@ -195,8 +195,26 @@ enum VideoModeType {
     Graphics = bindings::nk_gpu_dev_video_mode_NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D as _,
 }
 
+fn get_bitmap_pixel(bitmap: &Bitmap, x: u32, y: u32) -> Option<&'_ Pixel>{
+    if x >= bitmap.width || y >= bitmap.height {
+        None
+    } else {
+        unsafe { Some(&bitmap
+                      .pixels
+                      .as_slice((bitmap.width * bitmap.height) as usize)[(x + y * (bitmap.width)) as usize]) }
+    }
+}
+
 // gpu device-specific functions
 impl VirtioGpuDev {
+    fn name(&self) -> &'_ str {
+        self.gpu_dev.as_ref().unwrap().name()
+    }
+
+    fn get_pixel(&mut self, x: u32, y: u32) -> &'_ mut Pixel {
+        &mut self.frame_buffer.as_mut().unwrap()[(y * self.frame_box.width + x) as usize]
+    }
+
     fn gen_mode(&self, modenum: usize) -> VideoMode{
         if modenum == 0 {
             VideoMode {
@@ -338,7 +356,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         let mut d = state.lock();
         let mode_num = mode.mode_data as usize;
 
-        debug!("set mode on {}", d.gpu_dev.as_ref().unwrap().name());
+        debug!("set mode on {}", d.name());
 
         // 1. First, clean up the current mode and get us back to
         //    the basic text mode
@@ -579,8 +597,14 @@ impl gpudev::GpuDev for VirtioGpuDev {
 
     // graphics mode drawing commands
     // confine drawing to this box or region
-    fn graphics_set_clipping_box(state: &Self::State, rect: &Rect) -> Result {
-        unimplemented!();
+    fn graphics_set_clipping_box(state: &Self::State, rect: Option<&Rect>) -> Result {
+        let mut d = state.lock();
+
+        debug!("graphics_set_clipping_box on {}: {:?})\n", d.name(), rect);
+
+        d.clipping_box = rect.map(|rect| *rect).unwrap_or(d.frame_box);
+
+        Ok(())
     }
 
     fn graphics_set_clipping_region(state: &Self::State, region: &Region) -> Result {
@@ -624,7 +648,16 @@ impl gpudev::GpuDev for VirtioGpuDev {
         bitmap: &Bitmap, 
         op: BitBlitOp
     ) -> Result {
-        unimplemented!();
+        let mut d = state.lock();
+        debug!("graphics_fill_box_with_bitmap on {}", d.name());
+
+        for i in 0..(rect.width) {
+            for j in 0..(rect.height) {
+                *d.get_pixel(rect.x + i, rect.y + j) = *get_bitmap_pixel(bitmap, i % bitmap.width, j % bitmap.height).unwrap();
+            }
+        }
+
+        Ok(())
     }
     fn graphics_copy_box(
         state: &Self::State, 
