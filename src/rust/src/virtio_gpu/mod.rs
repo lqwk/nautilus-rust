@@ -284,6 +284,32 @@ impl VirtioGpuDev {
             Ok(())
         }
     }
+
+    // fn in_box(&self, c: &Coordinate) -> bool {
+    //     let b = self.clipping_box;
+    //     c.x >= b.x && c.x < (b.x + b.width) && 
+    //     c.y >= b.y && c.y < (b.y + b.height)
+    // }
+
+    
+}
+
+fn apply_with_blit(
+    oldpixel: &mut Pixel,
+    newpixel: &Pixel,
+    op: &BitBlitOp,
+) -> Result {
+    match op {
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_COPY => { unsafe { oldpixel.raw = newpixel.raw } },
+        _ => { return Err(-1); }
+    }
+
+    Ok(())
+}
+
+fn in_box(b: &Rect, c: &Coordinate) -> bool {
+    c.x >= b.x && c.x < (b.x + b.width) && 
+    c.y >= b.y && c.y < (b.y + b.height)
 }
 
 type State = RefCell<VirtioGpuDev>;
@@ -292,6 +318,7 @@ unsafe impl Send for VirtioGpuDev {}
 extern "C" {
     fn _glue_vga_copy_out(dest: *mut u16, len: usize);
     fn _glue_vga_copy_in(src: *mut u16, len: usize);
+    fn _glue_apply_with_blit(oldpixel: *mut Pixel, newpixel: &Pixel, op: BitBlitOp);
 }
 
 impl gpudev::GpuDev for VirtioGpuDev {
@@ -586,11 +613,13 @@ impl gpudev::GpuDev for VirtioGpuDev {
 
     // text mode drawing commands
     fn text_set_char(state: &Self::State, location: &Coordinate, val: &Char) -> Result {
+        debug!("text_set_char on {}", state.borrow_mut().name());
         unimplemented!();
     }
 
     // cursor location in text mode
     fn text_set_cursor(state: &Self::State, location: &Coordinate, flags: u32) -> Result {
+        debug!("text_set_cursor on {}", state.borrow_mut().name());
         unimplemented!();
     }
 
@@ -606,8 +635,33 @@ impl gpudev::GpuDev for VirtioGpuDev {
         Ok(())
     }
 
+    // confine drawing to this region overriding any previous regions or boxes
+    // a NULL clipping region should remove clipping limitations (reset to full screen size)    
     fn graphics_set_clipping_region(state: &Self::State, region: &Region) -> Result {
+        debug!("graphics_set_clipping_region on {}", state.borrow_mut().name());
         unimplemented!();
+    }
+
+    // Helper function:  oldpixel = op(oldpixel,newpixel) if in clipping box
+    // else does nothing
+    fn clip_apply_with_blit(
+        state: &Self::State,
+        location: &Coordinate,
+        oldpixel: &mut Pixel,
+        newpixel: &Pixel,
+        op: BitBlitOp,
+    ) -> Result {
+        vc_println!("TEST");
+        let d = state.borrow();
+
+        if in_box(&d.clipping_box, location) {
+            // unsafe { _glue_apply_with_blit(oldpixel, newpixel, op) };
+            apply_with_blit(oldpixel, newpixel, &op)?
+        } else {
+            debug!("failed to clip_apply_with_blit, location is not in box");
+        }
+
+        Ok(())
     }
 
     // draw stuff 
@@ -616,30 +670,103 @@ impl gpudev::GpuDev for VirtioGpuDev {
         location: &Coordinate, 
         pixel: &Pixel
     ) -> Result {
-        unimplemented!();
+        let mut d = state.borrow_mut();
+
+        debug!("graphics_draw_pixel {:?} on {} at ({}, {})", pixel.raw, d.name(), location.x, location.y);
+
+        // location needs to be within the bounding box of the frame buffer
+        // and pixel is only drawn if within the clipping box
+
+        Self::clip_apply_with_blit(
+            state, 
+            location, 
+            d.get_pixel(location.x as u32, location.y as u32),
+            pixel,
+            BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_COPY,
+        )?;
+
+        Ok (())
     }
+
     fn graphics_draw_line(
         state: &Self::State, 
         start: &Coordinate, 
         end: &Coordinate, 
         pixel: &Pixel
     ) -> Result {
-        unimplemented!();
+        let d = state.borrow_mut();
+
+        debug!("draw_line {} on {} ({}, {}) to ({}, {}", pixel.raw, d.name(), start.x, start.y, end.x, end.y);
+
+        let (mut x0, x1, mut y0, y1) = (start.x as i32, end.x as i32, start.y as i32, end.y as i32);
+
+        let (dx, dy) = (if x1 - x0 > 0 { x1 - x0 } else { x0 - x1 }, 
+                                  if y1 - y0 > 0 { y1 - y0 } else { y0 - y1 });
+        let sx: i32 = if x0 < x1 { 1 } else { -1 };
+        let sy: i32 = if y0 < y1 { 1 } else { -1 };
+        let mut error = dx + dy;
+        
+        loop {
+            let location = Coordinate { x: x0 as u32, y: y0 as u32 };
+            Self::graphics_draw_pixel(state, &location, pixel)?;
+            if x0 == x1 && y0 == y1 { break; }
+            let e2 = 2 * error;
+            if e2 >= dy {
+                if x0 == x1 { break; }
+                error = error + dy;
+                x0 = x0 + sx;
+            }
+            if e2 <= dx {
+                if y0 == y1 { break; }
+                error = error + dx;
+                y0 = y0 + sy;
+            }
+        }
+
+        Ok(())
     }
+
     fn graphics_draw_poly(
         state: &Self::State, 
         coord_list: &[Coordinate], 
         pixel: &Pixel
     ) -> Result {
-        unimplemented!();
+        let d = state.borrow_mut();
+
+        debug!("graphics_draw_poly on {}", d.name());
+
+        for i in 0..coord_list.len() {
+            Self::graphics_draw_line(state, &coord_list[i], &coord_list[(i + 1) % coord_list.len()], pixel)?;
+        }
+        
+        Ok(())
     }
+
     fn graphics_fill_box_with_pixel(
         state: &Self::State, 
         rect: &Rect, 
         pixel: &Pixel, 
         op: BitBlitOp
     ) -> Result {
-        unimplemented!();
+        let mut d = state.borrow_mut();
+
+        debug!("graphics_fill_box_with_pixel {} on {} with ({}, {}) ({}, {}) with op {:?}", 
+            pixel.raw, d.name(), rect.x, rect.y, rect.x+rect.width, rect.y+rect.width, op);
+
+        for i in 0..rect.width {
+            for j in 0..rect.height {
+                let location = Coordinate { x: rect.x + 1 as u32, y: rect.y + 1 as u32 };
+                Self::clip_apply_with_blit(
+                    state, 
+                    &location,
+                    d.get_pixel(location.x, location.y), 
+                    pixel, 
+                    op)
+                    .inspect_err(|_| error!("faild to fill box with pixel"))?;
+            }
+        }
+        
+        Ok(())
     }
     fn graphics_fill_box_with_bitmap(
         state: &Self::State, 
@@ -660,11 +787,30 @@ impl gpudev::GpuDev for VirtioGpuDev {
     }
     fn graphics_copy_box(
         state: &Self::State, 
-        source_rect: &Rect, 
+        src_box: &Rect, 
         dest_box: &Rect, 
         op: BitBlitOp
     ) -> Result {
         unimplemented!();
+        // let mut d = state.borrow_mut();
+
+        // debug!("graphics_copy_box on {} with ({}, {}) ({}, {}) to ({}, {}) ({}, {}) op {}", d.name(),
+        //     src_box.x, src_box.y, src_box.x+src_box.width, src_box.y+src_box.height, dest_box.x, dest_box.y,
+        //     dest_box.x+dest_box.width, dest_box.y+dest_box.height, op);
+
+        // for i in 0..dest_box.width {
+        //     for j in 0..dest_box.height {
+        //         let location = Coordinate { x: dest_box.x + i, y: dest_box.y + j };
+        //         Self::clip_apply_with_blit(
+        //             state, 
+        //             &location, 
+        //             d.get_pixel(location.x, location.y), 
+        //             d.get_pixel(src_box.x + (i % src_box.width), src_box.y + (j % src_box.height)), 
+        //         op);
+        //     }
+        // }
+
+        // Ok(())
     }
     fn graphics_draw_text(
         state: &Self::State, 
