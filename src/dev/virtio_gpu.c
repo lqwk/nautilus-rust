@@ -593,7 +593,7 @@ static int transact_base(struct virtio_pci_dev *dev,
     // make sure it is running
     virtio_pci_atomic_store(&dev->common->queue_enable, 1);
 
-    //debug_dump_descriptors(vq,0,8);
+    debug_dump_descriptors(vq,0,8);
 
     // ask the virtio-pci subsystem we live in to actually do the
     // notification write
@@ -601,7 +601,7 @@ static int transact_base(struct virtio_pci_dev *dev,
 
     // The device has our request now
     
-    //DEBUG("request initiated\n");
+    DEBUG("request initiated\n");
 
     // wait for the hardware to complete our request and
     // move it to the used ring
@@ -618,7 +618,7 @@ static int transact_base(struct virtio_pci_dev *dev,
 	return -1;
     }
 
-    //DEBUG("transaction complete\n");
+    DEBUG("transaction complete\n");
     
     return 0;
 }
@@ -646,7 +646,7 @@ static int transact_rw(struct virtio_pci_dev *dev,
 	return -1;
     }
 
-    //DEBUG("allocated chain %hu -> %hu\n",desc_idx[0],desc_idx[1]);
+    DEBUG("allocated chain %hu -> %hu\n",desc_idx[0],desc_idx[1]);
 
     
     
@@ -699,7 +699,7 @@ static int transact_rrw(struct virtio_pci_dev *dev,
 	return -1;
     }
 
-    //    DEBUG("allocated chain %hu -> %hu -> %hu\n",desc_idx[0],desc_idx[1],desc_idx[2]);
+    DEBUG("allocated chain %hu -> %hu -> %hu\n",desc_idx[0],desc_idx[1],desc_idx[2]);
 
     // Now get pointers to the specific descriptors in the virtq struct
     // (which is shared with the hardware)
