@@ -155,6 +155,8 @@ pub trait GpuDev {
     // flush - wait until all preceding drawing commands are visible by the user
     fn flush(state: &Self::State) -> Result;
 
+    fn clip_apply_with_blit(state: &Self::State, location: &Coordinate, oldpixel: &mut Pixel, newpixel: &Pixel, op: BitBlitOp) -> Result;
+
     // text mode drawing commands
     fn text_set_char(state: &Self::State, location: &Coordinate, val: &Char) -> Result;
 

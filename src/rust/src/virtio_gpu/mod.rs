@@ -2,6 +2,7 @@
 
 use core::ffi::{c_void, c_int};
 use core::cell::RefCell;
+use core::ops::Not;
 
 use crate::prelude::*;
 use crate::kernel::{
@@ -299,9 +300,38 @@ fn apply_with_blit(
     newpixel: &Pixel,
     op: &BitBlitOp,
 ) -> Result {
+    //debug!("in apply");
+    //debug!("{:?}", op);
     match op {
         BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_COPY => { unsafe { oldpixel.raw = newpixel.raw } },
-        _ => { return Err(-1); }
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_NOT => { unsafe { oldpixel.raw = newpixel.raw.not() } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_AND => { unsafe { oldpixel.raw = oldpixel.raw & newpixel.raw } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_OR => { unsafe { oldpixel.raw = oldpixel.raw | newpixel.raw  } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_NAND => { unsafe { oldpixel.raw = (oldpixel.raw & newpixel.raw).not()  } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_NOR => { unsafe { oldpixel.raw = (oldpixel.raw | newpixel.raw).not()  } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_XOR => { unsafe { oldpixel.raw = oldpixel.raw ^ newpixel.raw } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_XNOR => { unsafe { oldpixel.raw = (oldpixel.raw ^ newpixel.raw).not()  } },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_PLUS => { 
+            for i in 0..4 {
+                unsafe {oldpixel.channel[i] = oldpixel.channel[i].saturating_add(newpixel.channel[i])};
+            } 
+        },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_MINUS => { 
+            for i in 0..4 {
+                unsafe {oldpixel.channel[i] = oldpixel.channel[i].saturating_sub(newpixel.channel[i])};
+            } 
+        },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_MULTIPLY => { 
+            for i in 0..4 {
+                unsafe {oldpixel.channel[i] = oldpixel.channel[i].saturating_mul(newpixel.channel[i])};
+            } 
+        },
+        BitBlitOp::NK_GPU_DEV_BIT_BLIT_OP_DIVIDE => { 
+            for i in 0..4 {
+                unsafe {oldpixel.channel[i] = oldpixel.channel[i].saturating_div(newpixel.channel[i])};
+            } 
+        },
+        _ => { unsafe{ oldpixel.raw = newpixel.raw} }
     }
 
     Ok(())
@@ -651,9 +681,8 @@ impl gpudev::GpuDev for VirtioGpuDev {
         newpixel: &Pixel,
         op: BitBlitOp,
     ) -> Result {
-        vc_println!("TEST");
-        let d = state.borrow();
-
+        //vc_println!("TEST");
+        let d = unsafe { &*state.as_ptr() };
         if in_box(&d.clipping_box, location) {
             // unsafe { _glue_apply_with_blit(oldpixel, newpixel, op) };
             apply_with_blit(oldpixel, newpixel, &op)?
@@ -672,7 +701,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
     ) -> Result {
         let mut d = state.borrow_mut();
 
-        debug!("graphics_draw_pixel {:?} on {} at ({}, {})", pixel.raw, d.name(), location.x, location.y);
+        debug!("graphics_draw_pixel {:?} on {} at ({}, {})", unsafe{pixel.raw}, d.name(), location.x, location.y);
 
         // location needs to be within the bounding box of the frame buffer
         // and pixel is only drawn if within the clipping box
@@ -696,7 +725,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
     ) -> Result {
         let d = state.borrow_mut();
 
-        debug!("draw_line {} on {} ({}, {}) to ({}, {}", pixel.raw, d.name(), start.x, start.y, end.x, end.y);
+        debug!("draw_line {} on {} ({}, {}) to ({}, {}", unsafe{pixel.raw}, d.name(), start.x, start.y, end.x, end.y);
 
         let (mut x0, x1, mut y0, y1) = (start.x as i32, end.x as i32, start.y as i32, end.y as i32);
 
@@ -751,7 +780,7 @@ impl gpudev::GpuDev for VirtioGpuDev {
         let mut d = state.borrow_mut();
 
         debug!("graphics_fill_box_with_pixel {} on {} with ({}, {}) ({}, {}) with op {:?}", 
-            pixel.raw, d.name(), rect.x, rect.y, rect.x+rect.width, rect.y+rect.width, op);
+            unsafe{pixel.raw}, d.name(), rect.x, rect.y, rect.x+rect.width, rect.y+rect.width, op);
 
         for i in 0..rect.width {
             for j in 0..rect.height {
