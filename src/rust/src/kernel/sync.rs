@@ -4,8 +4,8 @@ use lock_api::{GuardSend, RawMutex};
 
 // These functions are wrappers around C macros. See `glue.c`.
 extern "C" {
-    fn spin_lock_irq(lock: *mut bindings::spinlock_t) -> u8;
-    fn spin_unlock_irq(lock: *mut bindings::spinlock_t, flags: u8);
+    fn _glue_spin_lock_irq(lock: *mut bindings::spinlock_t) -> u8;
+    fn _glue_spin_unlock_irq(lock: *mut bindings::spinlock_t, flags: u8);
 }
 
 pub type IRQLock<T> = lock_api::Mutex<_NkIrqLock, T>;
@@ -48,7 +48,7 @@ unsafe impl RawMutex for _NkIrqLock {
         // SAFETY: Both the pointer to `state_flags` and `lock_ptr`
         // are valid pointers, as they just came from UnsafeCell::get.
         // Thread-safety is guaranteed by the lock itself.
-        unsafe { *self.state_flags.get() = spin_lock_irq(lock_ptr); }
+        unsafe { *self.state_flags.get() = _glue_spin_lock_irq(lock_ptr); }
     }
 
     fn try_lock(&self) -> bool {
@@ -61,6 +61,6 @@ unsafe impl RawMutex for _NkIrqLock {
         // SAFETY: Both the pointer to `state_flags` and `lock_ptr`
         // are valid pointers, as they just came from UnsafeCell::get.
         // Thread-safety is guaranteed by the lock itself.
-        unsafe { spin_unlock_irq(lock_ptr, *self.state_flags.get()); }
+        unsafe { _glue_spin_unlock_irq(lock_ptr, *self.state_flags.get()); }
     }
 }

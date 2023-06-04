@@ -34,24 +34,24 @@ nk_thread_t* _glue_get_cur_thread() {
     return get_cur_thread();
 }
 
-uint8_t spin_lock_irq(spinlock_t *lock) {
+uint8_t _glue_spin_lock_irq(spinlock_t *lock) {
     return spin_lock_irq_save(lock);
 }
 
-void spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
+void _glue_spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
   spin_unlock_irq_restore(lock, flags);
 }
 
 
-uint8_t irq_save(void) {
+uint8_t _glue_irq_save(void) {
     return irq_disable_save();
 }
 
-void irq_restore(uint8_t iflag) {
+void _glue_irq_restore(uint8_t iflag) {
     irq_enable_restore(iflag);
 }
 
-void glue_yield() {
+void _glue_yield() {
     nk_yield();
 }
 
