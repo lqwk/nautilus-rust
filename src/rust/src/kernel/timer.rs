@@ -20,10 +20,8 @@
 ///
 /// let timer = Timer::new("my_timer");
 /// ```
-extern crate cstr_core;
-use cstr_core::CString;
-
 use core::ffi::c_void;
+use alloc::ffi::CString;
 
 use super::bindings;
 
@@ -112,36 +110,6 @@ pub fn get_thread_default() -> Option<Timer> {
     } else {
         Some(Timer { timer })
     }
-}
-
-pub fn sleep(ns: u64) -> i32 {
-    // SAFETY: `nk_sleep` is a simple function that takes a single argument. There are no
-    // safety concerns as long as the argument is a valid u64.
-    unsafe { bindings::nk_sleep(ns) }
-}
-
-pub fn delay(ns: u64) -> i32 {
-    // SAFETY: `nk_delay` is a simple function that takes a single argument. There are no
-    // safety concerns as long as the argument is a valid u64.
-    unsafe { bindings::nk_delay(ns) }
-}
-
-pub fn init() -> i32 {
-    // SAFETY: `nk_timer_init` is a simple function that takes no arguments. There are no
-    // safety concerns as long as the underlying C library is correctly implemented.
-    unsafe { bindings::nk_timer_init() }
-}
-
-pub fn deinit() {
-    // SAFETY: `nk_timer_deinit` is a simple function that takes no arguments. There are no
-    // safety concerns as long as the underlying C library is correctly implemented.
-    unsafe { bindings::nk_timer_deinit() }
-}
-
-pub fn dump_timers() {
-    // SAFETY: `nk_timer_dump_timers` is a simple function that takes no arguments. There are no
-    // safety concerns as long as the underlying C library is correctly implemented.
-    unsafe { bindings::nk_timer_dump_timers() }
 }
 
 pub fn get_realtime() -> u64 {

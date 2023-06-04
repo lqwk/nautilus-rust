@@ -2,6 +2,7 @@ use crate::prelude::*;
 use crate::task::{Task, executor::Executor};
 use crate::task::utils::yield_now;
 use crate::kernel::timer;
+use crate::kernel::thread;
 
 make_logging_macros!("async");
 
@@ -25,8 +26,11 @@ async fn async_number() -> u32 {
 
 async fn example_task_1() {
     vc_println!("Hello from example task 1!\nI'm a blocking task to show the timer!\nWaiting 3 seconds...");
-    let ns = 3 * 1_000_000_000; // 3 seconds in nanoseconds
-    timer::sleep(ns); // sleep for 3 seconds
+    // `thread::sleep` is a blocking function. So this task cannot be interrupted during this
+    // sleep, unlike above, where we yield during the sleep.
+    //
+    // It would be nice to have an `async_sleep` function.
+    thread::sleep(core::time::Duration::from_secs(3));
     vc_println!("Done sleeping!");
     vc_println!("blocking number 1: {}", 8086);
 }
