@@ -1,8 +1,12 @@
 [package]
 name = "nk_rust"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 authors = [
+    "Matthew Sinclair <matthewsinclair2024@u.northwestern.edu>",
+    "Conor Kotwasinski <conorkotwasinski2024@u.northwestern.edu>",
+    "Ian Armstrong <ianarmstrong2022@u.northwestern.edu>",
+    "Charles Zhou <charleszhou2023@u.northwestern.edu>",
     "Michael Polinski <michaelp@u.northwestern.edu>",
     "Hanming Wang <hanmingwang2022@u.northwestern.edu>",
     "Qingwei Lan <qingweilan2022@u.northwestern.edu>",

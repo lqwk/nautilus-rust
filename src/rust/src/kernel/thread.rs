@@ -53,7 +53,7 @@
 //! thread local storage C functions.
 
 use alloc::{boxed::Box, ffi::CString, string::String};
-use core::{ffi::c_void, cell::UnsafeCell, mem::MaybeUninit, time::Duration};
+use core::{ffi::c_void, time::Duration};
 
 use crate::kernel::{bindings, error::{Result, ResultExt}, print::make_logging_macros};
 
@@ -75,9 +75,9 @@ where
 
     // SAFETY: The C caller makes sure that `raw_input` is the pointer we passed
     // when we called `nk_thread_start`. The referrent of that pointer was a
-    // `(F, MaybeUninit<T>)` tuple, so it is safe to dereference it here as such.
-    let (callback, output) = unsafe { &mut *(raw_input as *mut (F, MaybeUninit<T>)) };
-    output.write(callback());
+    // `(F, Option<T>)` tuple, so it is safe to dereference it here as such.
+    let (callback, output) = unsafe { &mut *(raw_input as *mut (F, Option<T>)) };
+    *output = Some(callback());
 }
 
 unsafe extern "C" fn call_closure<F, T>(raw_input: *mut c_void, _: *mut *mut c_void)
@@ -86,9 +86,9 @@ where
 {
     // SAFETY: The C caller makes sure that `raw_input` is the pointer we passed
     // when we called `nk_thread_start`. The referrent of that pointer was a
-    // `(F, MaybeUninit<T>)` tuple, so it is safe to dereference it here as such.
-    let (callback, output) = unsafe { &mut *(raw_input as *mut (F, MaybeUninit<T>)) };
-    output.write(callback());
+    // `(F, Option<T>)` tuple, so it is safe to dereference it here as such.
+    let (callback, output) = unsafe { &mut *(raw_input as *mut (F, Option<T>)) };
+    *output = Some(callback());
 }
 
 pub type ThreadId = bindings::nk_thread_id_t;
@@ -103,7 +103,7 @@ pub enum StackSize {
 }
 
 #[must_use = "must eventually spawn the thread"]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Builder {
     name: Option<String>,
     stack_size: Option<StackSize>,
@@ -187,7 +187,7 @@ impl Builder {
         T: Send + 'static
     {
         let mut id = core::ptr::null_mut();
-        let data = Some(Box::new(UnsafeCell::new((f, MaybeUninit::uninit()))));
+        let data = Some(Box::new((f, None)));
 
         let Builder { name, stack_size, bound_cpu, inherits_vc } = self;
 
@@ -205,7 +205,7 @@ impl Builder {
         let ret = unsafe {
             bindings::nk_thread_create(
                 Some(thread_fn),
-                data.as_ref().unwrap().get() as *mut _,
+                (& **data.as_ref().unwrap()) as *const _ as *mut c_void,
                 // Nautilus' `output` handling for threads seems completely
                 // broken, and there is no C code using thread output to refer
                 // to ...
@@ -274,7 +274,7 @@ impl Builder {
 #[derive(Debug)]
 pub struct JoinHandle<F, T> {
     id: ThreadId,
-    data: Option<Box<UnsafeCell<(F, MaybeUninit<T>)>>> // awful awful awful
+    data: Option<Box<(F, Option<T>)>>
 }
 
 impl<F, T> JoinHandle<F, T> {
@@ -287,9 +287,7 @@ impl<F, T> JoinHandle<F, T> {
         let retval = unsafe { bindings::nk_join(self.id, core::ptr::null_mut() as _) };
 
         Result::from_error_code(retval)
-            // SAFETY: The output has been written to by the thread function, so it
-            // is safe to `assume_init` here.
-            .map(|_| { unsafe { self.data.take().unwrap().into_inner().1.assume_init() } })
+            .map(|_| { self.data.take().unwrap().1.unwrap() })
             .inspect_err(|e| error!("Failed to join on thread. Error code {e}."))
     }
 
@@ -408,7 +406,7 @@ pub fn get_parent_tid() -> ThreadId {
 ///
 /// This function is unsafe because it calls the C function `nk_thread_exit`.
 /// The safety of this function depends on the correct implementation of the C library.
-pub fn exit(retval: *mut c_void) {
+pub unsafe fn exit(retval: *mut c_void) {
     // SAFETY: `nk_thread_exit` is a C function that expects a valid pointer for the return value.
     // It causes the calling thread to terminate and does not return a value.
     unsafe { bindings::nk_thread_exit(retval) }

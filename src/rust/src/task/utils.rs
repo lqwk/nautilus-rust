@@ -1,4 +1,4 @@
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 use core::pin::Pin;
 use crate::task::Future;
 
