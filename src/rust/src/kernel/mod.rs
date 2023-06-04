@@ -37,6 +37,9 @@ pub mod timer;
 /// Threads.
 pub mod thread;
 
+/// Cooperative multitasking.
+pub mod task;
+
 /// The global panic handler for Rust code, triggering
 /// and unrecoverable kernel panic.
 #[panic_handler]
@@ -46,5 +49,5 @@ pub fn panic(info: &PanicInfo) -> ! {
     //
     // We don't need to pass the panic message here,
     // since we already printed it above.
-    unsafe { bindings::panic(&0_i8 as *const i8); }
+    unsafe { bindings::panic(core::ptr::null()); }
 }

@@ -1,6 +1,6 @@
 use crate::prelude::*;
-use crate::task::{Task, executor::Executor};
-use crate::task::utils::yield_now;
+use crate::kernel::task::{Task, executor::Executor};
+use crate::kernel::task::utils::yield_now;
 use crate::kernel::timer;
 use crate::kernel::thread;
 

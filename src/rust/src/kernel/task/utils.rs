@@ -1,6 +1,6 @@
 use core::task::{Context, Poll};
 use core::pin::Pin;
-use crate::task::Future;
+use crate::kernel::task::Future;
 
 pub async fn yield_now() {
     struct YieldNow {

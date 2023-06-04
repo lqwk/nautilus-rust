@@ -9,10 +9,17 @@ extern "C" {
     fn _glue_yield();
 }
 
+#[derive(Debug)]
 pub struct Executor {
     tasks: BTreeMap<TaskId, Task>,
     task_queue: Arc<ArrayQueue<TaskId>>,
     waker_cache: BTreeMap<TaskId, Waker>,
+}
+
+impl Default for Executor {
+    fn default() -> Executor {
+        Executor::new()
+    }
 }
 
 // Struct representing the executor which manages tasks and their execution.

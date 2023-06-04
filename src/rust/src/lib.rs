@@ -56,9 +56,6 @@ mod async_demo;
 /// Threading demo.
 mod thread_demo;
 
-/// Cooperative multitasking.
-mod task;
-
 /// Virtio GPU driver.
 #[cfg_accessible(kernel::bindings::NAUT_CONFIG_RUST_VIRTIO_GPU)]
 mod virtio_gpu;
