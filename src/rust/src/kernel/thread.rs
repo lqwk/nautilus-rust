@@ -1,4 +1,4 @@
-//! Thread Kernel Module
+//! Threads.
 //!
 //! This module provides a safe and idiomatic Rust interface for managing Nautilus threads.
 //!

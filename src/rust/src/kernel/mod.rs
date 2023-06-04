@@ -34,7 +34,6 @@ pub mod error;
 /// Timers.
 pub mod timer;
 
-/// Threads.
 pub mod thread;
 
 /// Cooperative multitasking.
