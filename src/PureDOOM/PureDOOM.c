@@ -16,6 +16,8 @@
 
 #define MAX_MODES 64
 
+const uint32_t N = 2;
+
 static const nk_keycode_t NoShiftNoCaps[] = {
     KEY_UNKNOWN, ASCII_ESC, '1', '2',   /* 0x00 - 0x03 */
     '3', '4', '5', '6',                 /* 0x04 - 0x07 */
@@ -81,13 +83,24 @@ void input_handler() {
 
 int run_doom(struct nk_gpu_dev* d, nk_gpu_dev_box_t* box) {
     doom_init(0, NULL, 0);
-    nk_gpu_dev_bitmap_t* bitmap = malloc(sizeof(nk_gpu_dev_bitmap_t) + 4 * SCREENWIDTH * SCREENHEIGHT);
-    bitmap->width = SCREENWIDTH;
-    bitmap->height = SCREENHEIGHT;
+    nk_gpu_dev_bitmap_t* bitmap = malloc((sizeof(nk_gpu_dev_bitmap_t) + 4 * N * N * SCREENWIDTH * SCREENHEIGHT));
+    bitmap->width = N * SCREENWIDTH;
+    bitmap->height = N * SCREENHEIGHT;
     while (true) {
         doom_update();
-        uint8_t* framebuffer = doom_get_framebuffer(4 /* RGBA */);
-        memcpy(bitmap->pixels, framebuffer, 4 * SCREENWIDTH * SCREENHEIGHT);
+        nk_gpu_dev_pixel_t* framebuffer = doom_get_framebuffer(4 /* RGBA */);
+
+        for (uint32_t y = 0; y < SCREENHEIGHT; y++) {
+            for (uint32_t x = 0; x < SCREENWIDTH; x++) {
+                nk_gpu_dev_pixel_t p = framebuffer[y * SCREENWIDTH + x];
+                for (uint32_t dy = 0; dy < N; dy++) {
+                    for (uint32_t dx = 0; dx < N; dx++) {
+                        bitmap->pixels[(N * y + dy) * N * SCREENWIDTH + N * x + dx] = p;
+                    }
+                }
+            }
+        }
+
         nk_gpu_dev_graphics_fill_box_with_bitmap(d, box, bitmap, NK_GPU_DEV_BIT_BLIT_OP_COPY);
         nk_gpu_dev_flush(d);
     }
@@ -138,10 +151,10 @@ static int handle_doom (char * buf, void * priv) {
     }
 
     curmode = &modes[sel];
-    nk_gpu_dev_box_t clipping_box = {.x = (curmode->width - SCREENWIDTH) / 2,
-                                     .y = (curmode->height - SCREENHEIGHT) / 2,
-                                     .width = SCREENWIDTH,
-                                     .height = SCREENHEIGHT};
+    nk_gpu_dev_box_t clipping_box = {.x = (curmode->width - N * SCREENWIDTH) / 2,
+                                     .y = (curmode->height - N * SCREENHEIGHT) / 2,
+                                     .width = N * SCREENWIDTH,
+                                     .height = N * SCREENHEIGHT};
     nk_gpu_dev_graphics_set_clipping_box(d, &clipping_box);
 
     // Change default bindings to modern mapping

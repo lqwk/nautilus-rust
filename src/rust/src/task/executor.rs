@@ -4,9 +4,9 @@ use crossbeam_queue::ArrayQueue;
 use core::task::{Context, Poll, Waker};
 
 extern "C" {
-    fn irq_save() -> u8;
-    fn irq_restore(flags: u8);
-    fn glue_yield();
+    fn _glue_irq_save() -> u8;
+    fn _glue_irq_restore(flags: u8);
+    fn _glue_yield();
 }
 
 pub struct Executor {
@@ -83,11 +83,11 @@ impl Executor {
     // Otherwise, enables the interrupts.
     fn sleep_if_idle(&self) {
         unsafe {
-            let iflag = irq_save();
+            let iflag = _glue_irq_save();
             if self.task_queue.is_empty() {
-                glue_yield();
+                _glue_yield();
             }
-            irq_restore(iflag);
+            _glue_irq_restore(iflag);
         }
     }
 

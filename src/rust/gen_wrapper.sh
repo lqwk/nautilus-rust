@@ -28,6 +28,10 @@ for f in $(find ../../include/config/debug -name "*.h" -exec realpath --relative
   echo "#include \"$f\"" >> $OUTF
 done
 
+for f in $(find ../../include/config/rust -name "*.h" -exec realpath --relative-to ../../include {} \;); do
+  echo "#include \"$f\"" >> $OUTF
+done
+
 for f in ../../include/nautilus/*.h; do
   name=$(basename $f)
   if [ "$name" = "linker.h" ]; then
@@ -41,3 +45,4 @@ for f in ../../include/nautilus/*.h; do
   fi
 done
 
+echo "#include \"dev/virtio_pci.h\"" >> $OUTF

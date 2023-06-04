@@ -3,8 +3,8 @@
 #include <nautilus/vc.h>
 #include <nautilus/spinlock.h>
 #include <nautilus/thread.h>
-
-// parport
+#include <dev/virtio_pci.h>
+#include <../include/dev/vga.h>
 
 // direct wrappers around inline functions and macros
 
@@ -34,23 +34,50 @@ nk_thread_t* _glue_get_cur_thread() {
     return get_cur_thread();
 }
 
-uint8_t spin_lock_irq(spinlock_t *lock) {
+void _glue_spin_lock(spinlock_t *lock) {
+    spin_lock(lock);
+}
+
+void _glue_spin_unlock(spinlock_t *lock) {
+    spin_unlock(lock);
+}
+
+uint8_t _glue_spin_lock_irq(spinlock_t *lock) {
     return spin_lock_irq_save(lock);
 }
 
-void spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
-  spin_unlock_irq_restore(lock, flags);
+void _glue_spin_unlock_irq(spinlock_t *lock, uint8_t flags) {
+    spin_unlock_irq_restore(lock, flags);
 }
 
-
-uint8_t irq_save(void) {
+uint8_t _glue_irq_save(void) {
     return irq_disable_save();
 }
 
-void irq_restore(uint8_t iflag) {
+void _glue_irq_restore(uint8_t iflag) {
     irq_enable_restore(iflag);
 }
 
-void glue_yield() {
+void _glue_yield() {
     nk_yield();
+}
+
+void _glue_mbarrier() {
+    mbarrier();
+}
+
+void _glue_virtio_pci_atomic_store_u16(uint16_t* destptr, uint16_t value) {
+    virtio_pci_atomic_store(destptr, value);
+}
+
+uint16_t _glue_virtio_pci_atomic_load_u16(uint16_t* srcptr) {
+    return virtio_pci_atomic_load(srcptr);
+}
+
+void _glue_vga_copy_out(void* dest, uint32_t n) {
+    vga_copy_out(dest, n);
+}
+
+void _glue_vga_copy_in(void* src, uint32_t n) {
+    vga_copy_in(src, n);
 }

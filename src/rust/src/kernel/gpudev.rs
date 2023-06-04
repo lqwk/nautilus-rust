@@ -155,6 +155,8 @@ pub trait GpuDev {
     // flush - wait until all preceding drawing commands are visible by the user
     fn flush(state: &Self::State) -> Result;
 
+    fn clip_apply_with_blit(state: &Self::State, location: &Coordinate, oldpixel: &mut Pixel, newpixel: &Pixel, op: BitBlitOp) -> Result;
+
     // text mode drawing commands
     fn text_set_char(state: &Self::State, location: &Coordinate, val: &Char) -> Result;
 
@@ -163,7 +165,7 @@ pub trait GpuDev {
 
     // graphics mode drawing commands
     // confine drawing to this box or region
-    fn graphics_set_clipping_box(state: &Self::State, rect: &Rect) -> Result;
+    fn graphics_set_clipping_box(state: &Self::State, rect: Option<&Rect>) -> Result;
 
     fn graphics_set_clipping_region(state: &Self::State, region: &Region) -> Result;
 
@@ -293,7 +295,7 @@ impl<G: GpuDev> Registration<G> {
         let state = unsafe { &*(raw_state as *const G::State) };
 
         // SAFETY: Caller ensures `raw_rect` is a valid pointer.
-        let rect = unsafe { &*raw_rect };
+        let rect = unsafe { raw_rect.as_ref() };
 
         G::graphics_set_clipping_box(state, rect).as_error_code()
     }
@@ -529,6 +531,11 @@ impl<G: GpuDev> Registration<G> {
             _InternalRegistration::try_new(name, interface_ptr, data)
                 .inspect_err(|_| { let _ = Box::from_raw(interface_ptr); })?
         }))
+    }
+
+    /// Gets the name of the GPU device.
+    pub fn name(&self) -> &str {
+        self.0.name.to_str().expect("Name cannot contain internal null bytes.")
     }
 
 }
