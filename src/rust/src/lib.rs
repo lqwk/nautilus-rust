@@ -1,7 +1,4 @@
-#![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
-#![feature(c_size_t)]
-#![feature(lang_items)]
 
 // This enables the `some_result.inspect_err(...)` function,
 // which makes error logging much more ergonomic. This feature
@@ -30,16 +27,38 @@
 
 extern crate alloc;
 
+/// A collection of useful imports. Most Rust modules will want
+/// to use this prelude.
 #[allow(unused_imports)]
 mod prelude;
+
 #[deny(missing_debug_implementations)]
 #[warn(clippy::undocumented_unsafe_blocks)]
 #[allow(unused_macros, dead_code)]
-mod kernel;
+/// Rust API's for the Nautilus kernel.
+///
+/// This module contains the kernel APIs that have been ported or wrapped for usage by Rust code in
+/// the kernel and is shared by all of them. In other words, all the rest of the Rust code in the
+/// kernel (e.g. kernel modules written in Rust) depends on core, alloc and this module. If you need
+/// a kernel C API that is not ported or wrapped yet here, then do so first instead of bypassing
+/// this module.
+pub mod kernel;
+
+/// Simple Rust example module.
 mod example;
+
+/// Parallel port driver.
 mod parport;
+
+/// Cooperative multitasking demo.
 mod async_demo;
+
+/// Threading demo.
 mod thread_demo;
+
+/// Cooperative multitasking.
 mod task;
+
+/// Virtio GPU driver.
 #[cfg_accessible(kernel::bindings::NAUT_CONFIG_RUST_VIRTIO_GPU)]
 mod virtio_gpu;

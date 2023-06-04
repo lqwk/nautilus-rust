@@ -20,6 +20,7 @@ extern "C" {
 pub type Spinlock<T> = lock_api::Mutex<_NkSpinlock, T>;
 
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct _NkSpinlock {
     spinlock: UnsafeCell<bindings::spinlock_t>
 }
@@ -79,6 +80,7 @@ unsafe impl RawMutex for _NkSpinlock {
 pub type IRQLock<T> = lock_api::Mutex<_NkIrqLock, T>;
 
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct _NkIrqLock {
     spinlock: UnsafeCell<bindings::spinlock_t>,
     state_flags: UnsafeCell<u8>,

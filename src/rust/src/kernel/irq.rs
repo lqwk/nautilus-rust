@@ -2,8 +2,11 @@ use core::ffi::{c_int, c_void};
 use core::marker::PhantomData;
 use alloc::sync::Arc;
 
-use crate::prelude::*;
-use crate::kernel::bindings;
+use crate::kernel::{
+    error::{Result, ResultExt},
+    print::make_logging_macros,
+    bindings
+};
 
 make_logging_macros!("irq");
 

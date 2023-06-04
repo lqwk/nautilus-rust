@@ -5,6 +5,7 @@ use core::{
 
 use crate::kernel::bindings;
 
+#[derive(Debug)]
 pub struct NkAllocator;
 
 // SAFETY: The allocator wraps `kmem_malloc`, which is valid and correct.

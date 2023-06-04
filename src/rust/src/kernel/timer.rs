@@ -27,6 +27,7 @@ use core::ffi::c_void;
 
 use super::bindings;
 
+#[derive(Debug)]
 pub struct Timer {
     timer: *mut bindings::nk_timer_t,
 }
