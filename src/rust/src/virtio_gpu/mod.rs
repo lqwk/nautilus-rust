@@ -1,11 +1,11 @@
 #![allow(unused_variables)]
 
-use core::cell::RefCell;
 use core::ffi::c_void;
 use core::ops::Not;
 
 use crate::kernel::{
     bindings, gpudev,
+    sync::Spinlock,
     gpudev::{BitBlitOp, Bitmap, Char, Coordinate, Font, Pixel, Rect, Region, VideoMode},
     print::make_logging_macros,
 };
@@ -462,12 +462,12 @@ fn draw_pixel(clipping_box: &Rect, location: &Coordinate, oldpixel: &mut Pixel, 
  */
 
 impl gpudev::GpuDev for VirtioGpu {
-    type State = RefCell<VirtioGpu>;
+    type State = Spinlock<VirtioGpu>;
 
     fn get_available_modes(state: &Self::State, modes: &mut [VideoMode]) -> Result<usize> {
         debug!("get_available_modes");
 
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
 
         if modes.len() < 2 {
             error!("Must provide at least two mode slots\n");
@@ -508,7 +508,7 @@ impl gpudev::GpuDev for VirtioGpu {
     fn get_mode(state: &Self::State) -> Result<VideoMode> {
         debug!("get_mode");
 
-        let d = state.borrow_mut();
+        let d = state.lock();
         Ok(d.gen_mode(d.cur_mode))
     }
 
@@ -516,7 +516,7 @@ impl gpudev::GpuDev for VirtioGpu {
     // this will switch to the mode before returning
     fn set_mode(state: &Self::State, mode: &VideoMode) -> Result {
         {
-            let mut d = state.borrow_mut();
+            let mut d = state.lock();
             let mode_num = mode.mode_data as usize;
 
             debug!("set mode on {}", d.name());
@@ -719,7 +719,7 @@ impl gpudev::GpuDev for VirtioGpu {
     fn flush(state: &Self::State) -> Result {
         debug!("flush");
 
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
         if d.cur_mode == 0 {
             debug!("ignoring flush for text mode");
             return Ok(());
@@ -783,20 +783,20 @@ impl gpudev::GpuDev for VirtioGpu {
 
     // text mode drawing commands
     fn text_set_char(state: &Self::State, location: &Coordinate, val: &Char) -> Result {
-        debug!("text_set_char on {}", state.borrow_mut().name());
+        debug!("text_set_char on {}", state.lock().name());
         unimplemented!();
     }
 
     // cursor location in text mode
     fn text_set_cursor(state: &Self::State, location: &Coordinate, flags: u32) -> Result {
-        debug!("text_set_cursor on {}", state.borrow_mut().name());
+        debug!("text_set_cursor on {}", state.lock().name());
         unimplemented!();
     }
 
     // graphics mode drawing commands
     // confine drawing to this box or region
     fn graphics_set_clipping_box(state: &Self::State, rect: Option<&Rect>) -> Result {
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
 
         debug!("graphics_set_clipping_box on {}: {:?})\n", d.name(), rect);
 
@@ -810,7 +810,7 @@ impl gpudev::GpuDev for VirtioGpu {
     fn graphics_set_clipping_region(state: &Self::State, region: &Region) -> Result {
         debug!(
             "graphics_set_clipping_region on {}",
-            state.borrow_mut().name()
+            state.lock().name()
         );
         unimplemented!();
     }
@@ -824,7 +824,7 @@ impl gpudev::GpuDev for VirtioGpu {
         newpixel: &Pixel,
         op: BitBlitOp,
     ) -> Result {
-        let d = state.borrow();
+        let d = state.lock();
 
         clip_apply_with_blit(&d.clipping_box, location, oldpixel, newpixel, op);
 
@@ -833,7 +833,7 @@ impl gpudev::GpuDev for VirtioGpu {
 
     // draw stuff
     fn graphics_draw_pixel(state: &Self::State, location: &Coordinate, pixel: &Pixel) -> Result {
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
 
         debug!(
             "graphics_draw_pixel {:?} on {} at ({}, {})",
@@ -862,7 +862,7 @@ impl gpudev::GpuDev for VirtioGpu {
         end: &Coordinate,
         pixel: &Pixel,
     ) -> Result {
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
 
         debug!(
             "draw_line {:#x} on {} ({}, {}) to ({}, {}",
@@ -916,7 +916,7 @@ impl gpudev::GpuDev for VirtioGpu {
     }
 
     fn graphics_draw_poly(state: &Self::State, coord_list: &[Coordinate], pixel: &Pixel) -> Result {
-        debug!("graphics_draw_poly on {}", state.borrow().name());
+        debug!("graphics_draw_poly on {}", state.lock().name());
 
         for i in 0..coord_list.len() {
             Self::graphics_draw_line(
@@ -936,7 +936,7 @@ impl gpudev::GpuDev for VirtioGpu {
         pixel: &Pixel,
         op: BitBlitOp,
     ) -> Result {
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
 
         debug!(
             "graphics_fill_box_with_pixel {:#x} on {} with ({}, {}) ({}, {}) with op {:?}",
@@ -973,7 +973,7 @@ impl gpudev::GpuDev for VirtioGpu {
         bitmap: &Bitmap,
         op: BitBlitOp,
     ) -> Result {
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
         debug!("graphics_fill_box_with_bitmap on {}", d.name());
 
         for i in 0..(rect.width) {
@@ -992,7 +992,7 @@ impl gpudev::GpuDev for VirtioGpu {
         dest_box: &Rect,
         op: BitBlitOp,
     ) -> Result {
-        let mut d = state.borrow_mut();
+        let mut d = state.lock();
 
         debug!("graphics_copy_box on {}", d.name());
 
@@ -1291,7 +1291,7 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
     info!("init");
 
     // Allocate a default state structure for this device
-    let dev = Arc::new(RefCell::new(VirtioGpu::default()));
+    let dev = Arc::new(Spinlock::new(VirtioGpu::default()));
 
     // Acknowledge to the device that we see it
     //
@@ -1331,7 +1331,7 @@ extern "C" fn virtio_gpu_init(virtio_dev: *mut bindings::virtio_pci_dev) -> core
 
     // Associate our state with the general virtio-pci device structure,
     // and vice-versa:
-    let dev_ptr = &*dev.borrow_mut() as *const _ as *mut VirtioGpu;
+    let dev_ptr = &*dev.lock() as *const _ as *mut VirtioGpu;
 
     // SAFETY: `virtio_dev` is a valid pointer, ensured by caller (PCI subsystem).
     // `dev_ptr` is also valid, as we just created it from a reference above.

@@ -1,13 +1,13 @@
 use crate::kernel::thread;
 use crate::prelude::*;
 
-use crate::kernel::sync::IRQLock;
+use crate::kernel::sync::Spinlock;
 
 make_logging_macros!("thread_demo");
 
 fn basic_thread_test(n: usize) -> Result {
     let mut handles = Vec::with_capacity(n);
-    let total = Arc::new(IRQLock::new(0_usize));
+    let total = Arc::new(Spinlock::new(0_usize));
 
     for _ in 0..n {
         let my_total = Arc::clone(&total);
@@ -57,6 +57,7 @@ register_shell_command!("rust_thread", "rust_thread", |_| {
     vc_println!("Entered Rust threading demo.");
 
     basic_thread_test(500)
+        .inspect(|_| vc_println!("Initial test passed."))
         .and_then(|_| builder_thread_test(10))
         .inspect_err(|_| vc_println!("Rust threading demo failed!"))?;
 
