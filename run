@@ -10,8 +10,10 @@ make ramdisk.img
 rm -f src/asm/ramdisk.o
 
 if test -e "ramdisk.img"; then
-    make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out -drive file=ramdisk.img,if=virtio
+    # -smp 4 or greater seems to break littlefs.
+    make isoimage && qemu-system-x86_64 -smp 3 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out -drive file=ramdisk.img,if=virtio
 else
-    make isoimage && qemu-system-x86_64 -smp 2 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out
+    # -smp 4 or greater seems to break littlefs.
+    make isoimage && qemu-system-x86_64 -smp 3 -m 2048 -vga virtio -serial stdio -boot d -cdrom nautilus.iso -parallel file:parport.out
 fi
 

@@ -10,6 +10,13 @@ extern "C" {
     fn _glue_spin_unlock_irq(lock: *mut bindings::spinlock_t, flags: u8);
 }
 
+/// A mutual exlusion primitive for protecting shared data, backed
+/// by Nautilus' `spinlock_t`.
+///
+/// `Spinlock`s should not be used in contexts where an interrupt
+/// may try to acquire the lock while another thread holds the lock,
+/// as this can cause a deadlock. Use [`IRQLock`] for this purpose
+/// instead.
 pub type Spinlock<T> = lock_api::Mutex<_NkSpinlock, T>;
 
 #[doc(hidden)]
@@ -64,6 +71,11 @@ unsafe impl RawMutex for _NkSpinlock {
 }
 
 
+/// A mutual exlusion primitive for protecting shared data when
+/// interrupts must be considered, backed by Nautilus' `spinlock_t`.
+///
+/// Unlike [`Spinlock`], an `IRQLock` will disable interrupts while the lock is held, making it
+/// appropriate to use with interrupts.
 pub type IRQLock<T> = lock_api::Mutex<_NkIrqLock, T>;
 
 #[doc(hidden)]
