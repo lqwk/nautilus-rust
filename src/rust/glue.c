@@ -4,7 +4,7 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/thread.h>
 #include <dev/virtio_pci.h>
-#include <../include/dev/vga.h>
+#include <dev/vga.h>
 
 // direct wrappers around inline functions and macros
 
