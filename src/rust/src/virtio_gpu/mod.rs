@@ -13,7 +13,12 @@ use crate::prelude::*;
 
 make_logging_macros!("virtio_gpu", NAUT_CONFIG_DEBUG_VIRTIO_GPU);
 
+// "scanout" means monitor
 const VIRTIO_GPU_MAX_SCANOUTS: usize = 16;
+
+// the resource ids we will use
+// it is important to note that resource id 0 has special
+// meaning - it means "disabled" or "none"
 const SCREEN_RID: u32 = 42;
 
 /*
@@ -189,6 +194,32 @@ enum VideoModeType {
     Graphics = bindings::nk_gpu_dev_video_mode_NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D as _,
 }
 
+/// The current mode of the device. Text mode: 0, Graphics mode: > 0.
+#[repr(usize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CurModeType {
+    Text,
+    Graphics(usize),
+}
+
+/// CurModeType enum conversion functions for use in referencing pmodes array.
+impl CurModeType {
+    /// Create a `CurModeType` from a `usize`. 
+    fn from_usize(n: usize) -> CurModeType {
+        match n {
+            0 => CurModeType::Text,
+            _ => CurModeType::Graphics(n),
+        }
+    }
+    /// Convert a `CurModeType` to a `usize`.
+    fn to_usize(&self) -> usize {
+        match self {
+            CurModeType::Text => 0,
+            CurModeType::Graphics(n) => *n,
+        }
+    }
+}
+
 /// The information we associate with the Virtio GPU device
 struct VirtioGpu {
     /// The handle to the GPU device registration.
@@ -199,8 +230,7 @@ struct VirtioGpu {
     /// data from the last request for modes made of the device
     disp_info_resp: RespDisplayInfo,
     /// (cur_mode == 0) => text mode; (cur_mode > 0) => graphics mode.
-    /// (This should probably be made into an enum).
-    cur_mode: usize,
+    cur_mode: CurModeType,
     /// The in-memory pixel data.
     frame_buffer: Option<Box<[Pixel]>>,
     /// A bounding box descibing the frame buffer.
@@ -219,7 +249,7 @@ impl Default for VirtioGpu {
             pci_dev: core::ptr::null_mut(),
             have_disp_info: false,
             disp_info_resp: RespDisplayInfo::default(),
-            cur_mode: 0,
+            cur_mode: CurModeType::Text,
             frame_buffer: None,
             frame_box: Rect::default(),
             clipping_box: Rect::default(),
@@ -241,8 +271,8 @@ impl VirtioGpu {
     }
 
     /// Creates a `VideoMode` based on the given mode number (0 => text; >0 => graphics).
-    fn gen_mode(&self, modenum: usize) -> VideoMode {
-        if modenum == 0 {
+    fn gen_mode(&self, modenum: CurModeType) -> VideoMode {
+        if modenum == CurModeType::Text {
             VideoMode {
                 type_: VideoModeType::Text as _,
                 width: 80,
@@ -251,18 +281,18 @@ impl VirtioGpu {
                 flags: 0,
                 mouse_cursor_width: 0,
                 mouse_cursor_height: 0,
-                mode_data: modenum as *mut c_void,
+                mode_data: modenum.to_usize() as *mut c_void,
             }
         } else {
             VideoMode {
                 type_: VideoModeType::Graphics as _,
-                width: self.disp_info_resp.pmodes[modenum - 1].r.width,
-                height: self.disp_info_resp.pmodes[modenum - 1].r.height,
+                width: self.disp_info_resp.pmodes[modenum.to_usize() - 1].r.width,
+                height: self.disp_info_resp.pmodes[modenum.to_usize() - 1].r.height,
                 channel_offset: [0, 1, 2, 3],
                 flags: bindings::NK_GPU_DEV_HAS_MOUSE_CURSOR as _,
                 mouse_cursor_width: 64,
                 mouse_cursor_height: 64,
-                mode_data: modenum as *mut c_void,
+                mode_data: modenum.to_usize() as *mut c_void,
             }
         }
     }
@@ -273,10 +303,11 @@ impl VirtioGpu {
             return Ok(());
         }
 
-        let mut disp_info_req = CtrlHdr::default();
+        let disp_info_req = CtrlHdr {
+            type_: CtrlType::GetDisplayInfo,
+            ..Default::default()
+        };
         self.disp_info_resp = RespDisplayInfo::default();
-
-        disp_info_req.type_ = CtrlType::GetDisplayInfo;
 
         // SAFETY: PCI subsystem ensures `virtio_dev` is a valid pointer when it
         // gives it to us in `virtio_gpu_init`.
@@ -308,9 +339,10 @@ impl VirtioGpu {
 
         Ok(())
     }
-
+    // This function resets the pipeline we have created
+    // Switching back from graphics mode in unimplemented
     fn reset(&mut self) -> Result {
-        if self.cur_mode != 0 {
+        if self.cur_mode != CurModeType::Text {
             error!("switching back from graphics mode is unimplemented");
             Err(-1)
         } else {
@@ -442,7 +474,7 @@ fn clip_apply_with_blit(
     if in_rect(clipping_box, location) {
         apply_with_blit(oldpixel, newpixel, op);
     } else {
-        debug!("failed to clip_apply_with_blit, location is not in box");
+        debug!("failed to clip_apply_with_blit, location is not in rect");
     }
 }
 
@@ -487,7 +519,7 @@ impl gpudev::GpuDev for VirtioGpu {
         };
         let mut cur: usize = 0;
 
-        modes[cur] = d.gen_mode(0);
+        modes[cur] = d.gen_mode(CurModeType::Text);
         cur += 1;
 
         // graphics modes
@@ -497,14 +529,14 @@ impl gpudev::GpuDev for VirtioGpu {
             }
             if d.disp_info_resp.pmodes[i].enabled != 0 {
                 debug!("filling out entry {cur} with scanout info {i}");
-                modes[cur] = d.gen_mode(i + 1);
+                modes[cur] = d.gen_mode(CurModeType::from_usize(i + 1));
                 cur += 1;
             }
         }
 
         Ok(cur)
     }
-
+    // grab the current mode - useful in case you need to reset it later
     fn get_mode(state: &Self::State) -> Result<VideoMode> {
         debug!("get_mode");
 
@@ -524,7 +556,7 @@ impl gpudev::GpuDev for VirtioGpu {
             // 1. First, clean up the current mode and get us back to
             //    the basic text mode
 
-            if d.cur_mode == 0 {
+            if d.cur_mode == CurModeType::Text {
                 // we are in VGA text mode - capture the text on screen
 
                 // SAFETY: FFI call.
@@ -556,8 +588,6 @@ impl gpudev::GpuDev for VirtioGpu {
             }
 
             // if we got here, we are switching to a graphics mode
-
-            // we are switching to this graphics mode
             //
             // (we use a raw pointer because the borrow checker sucks at understanding inner borrows).
             let pm = &d.disp_info_resp.pmodes[mode_num - 1] as *const DisplayOne as *mut DisplayOne;
@@ -565,20 +595,23 @@ impl gpudev::GpuDev for VirtioGpu {
             // 2. we next create a resource for the screen
             //    use SCREEN_RID as the ID
 
-            let mut create_2d_req = ResourceCreate2d::default();
+            let create_2d_req = ResourceCreate2d {
+                hdr: CtrlHdr {
+                    type_: CtrlType::ResourceCreate2D,
+                    ..Default::default()
+                },
+                resource_id: SCREEN_RID,
+                format: PixelFormatUnorm::R8G8B8A8 as u32,
+                // SAFETY: `pm` is a valid pointer, as it was just created above.
+                width: unsafe { pm.read().r.width },
+                // SAFETY: `pm` is a valid pointer, as it was just created above.
+                height: unsafe { pm.read().r.height },
+            };
             let mut create_2d_resp = CtrlHdr::default();
-
-            create_2d_req.hdr.type_ = CtrlType::ResourceCreate2D;
-            create_2d_req.resource_id = SCREEN_RID;
-            create_2d_req.format = PixelFormatUnorm::R8G8B8A8 as u32;
-            // SAFETY: `pm` is a valid pointer, as it was just created above.
-            create_2d_req.width = unsafe { pm.read().r.width };
-            // SAFETY: `pm` is a valid pointer, as it was just created above.
-            create_2d_req.height = unsafe { pm.read().r.height };
 
             debug!("doing transaction to create 2D screen");
 
-            // SAFETY: PCI subsystem ensures `virtio_dev` is a valid pointer when it
+            // SAFETY: PCI subsystem ensures `pci_dev` is a valid pointer when it
             // gives it to us in `virtio_gpu_init`.
             unsafe {
                 transact_rw(&mut *d.pci_dev, 0, &create_2d_req, &mut create_2d_resp)
@@ -631,21 +664,25 @@ impl gpudev::GpuDev for VirtioGpu {
 
             // 5. Now we need to associate our framebuffer (step 4) with our resource (step 2)
 
-            let mut backing_req = ResourceAttachBacking::default();
-            let mut backing_entry = MemEntry::default();
+            let backing_req = ResourceAttachBacking {
+                hdr: CtrlHdr { 
+                    type_: CtrlType::ResourceAttachBacking, 
+                    ..Default::default()
+                },
+                resource_id: SCREEN_RID,
+                nr_entries: 1,
+            };
+
+            let backing_entry = MemEntry {
+                addr: d.frame_buffer.as_ref().ok_or(-1)?.as_ptr() as *const c_void as u64,
+                length: fb_length as _,
+                ..Default::default()
+            };
             let mut backing_resp = CtrlHdr::default();
-
-            backing_req.hdr.type_ = CtrlType::ResourceAttachBacking;
-            backing_req.resource_id = SCREEN_RID;
-            backing_req.nr_entries = 1;
-
-            backing_entry.addr =
-                d.frame_buffer.as_ref().ok_or(-1)?.as_ptr() as *const c_void as u64;
-            backing_entry.length = fb_length as _;
 
             debug!("doing transaction to associate framebuffer with screen resource");
 
-            // SAFETY: PCI subsystem ensures `virtio_dev` is a valid pointer when it
+            // SAFETY: PCI subsystem ensures `pci_dev` is a valid pointer when it
             // gives it to us in `virtio_gpu_init`.
             unsafe {
                 transact_rrw(
@@ -671,18 +708,21 @@ impl gpudev::GpuDev for VirtioGpu {
             // 6. Now we need to associate our resource (step 2) with the scanout (step 1)
             //    use mode_num-1 as the scanout ID
 
-            let mut setso_req = SetScanout::default();
+            let setso_req = SetScanout {
+                hdr: CtrlHdr {
+                    type_: CtrlType::SetScanout,
+                    ..Default::default()
+                },
+                resource_id: SCREEN_RID,
+                // SAFETY: `pm` is a valid pointer, as it was just created above.
+                r: unsafe { pm.read().r },
+                scanout_id: mode_num as u32 - 1,
+            };
             let mut setso_resp = CtrlHdr::default();
-
-            setso_req.hdr.type_ = CtrlType::SetScanout;
-            setso_req.resource_id = SCREEN_RID;
-            // SAFETY: `pm` is a valid pointer, as it was just created above.
-            setso_req.r = unsafe { pm.read().r };
-            setso_req.scanout_id = mode_num as u32 - 1;
 
             debug!("doing transaction to associate screen resource with the scanout");
 
-            // SAFETY: PCI subsystem ensures `virtio_dev` is a valid pointer when it
+            // SAFETY: PCI subsystem ensures `pci_dev` is a valid pointer when it
             // gives it to us in `virtio_gpu_init`.
             unsafe { transact_rw(&mut *d.pci_dev, 0, &setso_req, &mut setso_resp) }
                 .inspect_err(|_| {
@@ -701,7 +741,7 @@ impl gpudev::GpuDev for VirtioGpu {
 
             // Now let's capture our mode number to indicate we are done with setup
             // and make subsequent calls aware of our state
-            d.cur_mode = mode_num;
+            d.cur_mode = CurModeType::from_usize(mode_num);
         } // lock guard is dropped
 
         Self::flush(state)?;
@@ -720,24 +760,26 @@ impl gpudev::GpuDev for VirtioGpu {
         debug!("flush");
 
         let mut d = state.lock();
-        if d.cur_mode == 0 {
+        if d.cur_mode == CurModeType::Text {
             debug!("ignoring flush for text mode");
             return Ok(());
         }
 
         // First, tell the GPU to DMA from our framebuffer to the resource
 
-        let mut xfer_req = TransferToHost2D::default();
+        let xfer_req = TransferToHost2D {
+            hdr: CtrlHdr { type_: CtrlType::TransferToHost2D,
+                 ..Default::default()},
+            r: d.disp_info_resp.pmodes[d.cur_mode.to_usize() - 1].r,
+            offset: 0,
+            resource_id: SCREEN_RID,
+            ..Default::default()
+        };
         let mut xfer_resp = CtrlHdr::default();
-
-        xfer_req.hdr.type_ = CtrlType::TransferToHost2D;
-        xfer_req.r = d.disp_info_resp.pmodes[d.cur_mode - 1].r;
-        xfer_req.offset = 0;
-        xfer_req.resource_id = SCREEN_RID;
 
         debug!("beginning transaction to tell GPU to DMA from framebuffer\n");
 
-        // SAFETY: PCI subsystem ensures `virtio_dev` is a valid pointer when it
+        // SAFETY: PCI subsystem ensures `pci_dev` is a valid pointer when it
         // gives it to us in `virtio_gpu_init`.
         unsafe {
             transact_rw(&mut *d.pci_dev, 0, &xfer_req, &mut xfer_resp).inspect_err(|_| {
@@ -753,12 +795,14 @@ impl gpudev::GpuDev for VirtioGpu {
         debug!("transaction complete");
 
         // Second, tell the GPU to copy from the resource to the screen
-        let mut flush_req = ResourceFlush::default();
+        let flush_req = ResourceFlush {
+            hdr: CtrlHdr { type_: CtrlType::ResourceFlush, 
+            ..Default::default()},
+            r: d.disp_info_resp.pmodes[d.cur_mode.to_usize() - 1].r,
+            resource_id: SCREEN_RID,
+            ..Default::default()
+        };
         let mut flush_resp = CtrlHdr::default();
-
-        flush_req.hdr.type_ = CtrlType::ResourceFlush;
-        flush_req.r = d.disp_info_resp.pmodes[d.cur_mode - 1].r;
-        flush_req.resource_id = SCREEN_RID;
 
         debug!("beginning transaction to tell GPU to copy from resource to screen");
 
@@ -794,6 +838,8 @@ impl gpudev::GpuDev for VirtioGpu {
     }
 
     // graphics mode drawing commands
+
+    
     // confine drawing to this box or region
     fn graphics_set_clipping_box(state: &Self::State, rect: Option<&Rect>) -> Result {
         let mut d = state.lock();
@@ -806,7 +852,7 @@ impl gpudev::GpuDev for VirtioGpu {
     }
 
     // confine drawing to this region overriding any previous regions or boxes
-    // a NULL clipping region should remove clipping limitations (reset to full screen size)
+    // or should remove clipping limitations (reset to full screen size)
     fn graphics_set_clipping_region(state: &Self::State, region: &Region) -> Result {
         debug!(
             "graphics_set_clipping_region on {}",
@@ -856,6 +902,8 @@ impl gpudev::GpuDev for VirtioGpu {
         Ok(())
     }
 
+    // draw line within bounding box of frame buffer limited to the portion
+    // of the line that is within the clipping box
     fn graphics_draw_line(
         state: &Self::State,
         start: &Coordinate,
@@ -875,6 +923,9 @@ impl gpudev::GpuDev for VirtioGpu {
             end.x,
             end.y
         );
+
+        // Bresenham's line algorithm, adapted from
+        // https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm#All_cases
 
         let (mut x0, x1, mut y0, y1) = (start.x as i32, end.x as i32, start.y as i32, end.y as i32);
 
@@ -915,6 +966,8 @@ impl gpudev::GpuDev for VirtioGpu {
         Ok(())
     }
 
+    // draw poly within bounding box of frame buffer limited to the portion
+    // of the poly that is within the clipping box
     fn graphics_draw_poly(state: &Self::State, coord_list: &[Coordinate], pixel: &Pixel) -> Result {
         debug!("graphics_draw_poly on {}", state.lock().name());
 
@@ -930,6 +983,8 @@ impl gpudev::GpuDev for VirtioGpu {
         Ok(())
     }
 
+    // draw box filled with pixel withing bounding box of frame buffer limited
+    // to the portion of the box that is within the clipping box
     fn graphics_fill_box_with_pixel(
         state: &Self::State,
         rect: &Rect,
@@ -965,8 +1020,12 @@ impl gpudev::GpuDev for VirtioGpu {
             }
         }
 
-        Ok(())
+        Ok(())  
     }
+
+    // copy from the bitmap to the frame buffer using the op to transform (via bitblit) the 
+    // output pixels that are withing the bounding box of the frame buffer limited to the
+    // portion that is within the clipping box
     fn graphics_fill_box_with_bitmap(
         state: &Self::State,
         rect: &Rect,
@@ -986,6 +1045,10 @@ impl gpudev::GpuDev for VirtioGpu {
 
         Ok(())
     }
+
+    // copy from one box in the frame buffer to another box in the frame buffer using the op to
+    // transform (via bitblit) the output pixels that are withing the bounding box of the frame
+    // buffer limited to the portion that is within the clipping box
     fn graphics_copy_box(
         state: &Self::State,
         src_box: &Rect,
@@ -1025,6 +1088,8 @@ impl gpudev::GpuDev for VirtioGpu {
 
         Ok(())
     }
+
+    // draw text to vc, if supported
     fn graphics_draw_text(
         state: &Self::State,
         location: &Coordinate,
@@ -1038,6 +1103,7 @@ impl gpudev::GpuDev for VirtioGpu {
     fn graphics_set_cursor_bitmap(state: &Self::State, bitmap: &Bitmap) -> Result {
         unimplemented!();
     }
+
     // the location is the position of the top-left pixel in the bitmap
     fn graphics_set_cursor(state: &Self::State, location: &Coordinate) -> Result {
         unimplemented!();
@@ -1054,7 +1120,6 @@ extern "C" {
     fn _glue_virtio_pci_atomic_load_u16(srcptr: *mut u16) -> u16;
     fn _glue_vga_copy_out(dest: *mut u16, len: usize);
     fn _glue_vga_copy_in(src: *mut u16, len: usize);
-    fn _glue_apply_with_blit(oldpixel: *mut Pixel, newpixel: &Pixel, op: BitBlitOp);
 }
 
 unsafe fn transact_base(dev: &mut bindings::virtio_pci_dev, qidx: u16, didx: u16) -> Result {
