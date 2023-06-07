@@ -350,6 +350,10 @@ impl VirtioGpu {
             Ok(())
         }
     }
+
+    fn name(&self) -> &'_ str {
+        self.gpu_dev.as_ref().unwrap().name()
+    }
 }
 
 // SAFETY: The only reason this is needed is because of the `pci_dev` pointer,
