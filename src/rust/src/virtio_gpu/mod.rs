@@ -1041,9 +1041,14 @@ impl gpudev::GpuDev for VirtioGpu {
 
         for i in 0..(rect.width) {
             for j in 0..(rect.height) {
-                let newpixel =
-                    get_bitmap_pixel(bitmap, i % bitmap.width, j % bitmap.height).ok_or(-1)?;
-                *d.get_pixel(rect.x + i, rect.y + j) = *newpixel;
+                let location = Coordinate {
+                    x: rect.x + i,
+                    y: rect.y + j,
+                };
+                let clipping_box = d.clipping_box;
+                let oldpixel = d.get_pixel(location.x, location.y);
+                let pixel = get_bitmap_pixel(bitmap, i % bitmap.width, j % bitmap.height).ok_or(-1)?;
+                clip_apply_with_blit(&clipping_box, &location, oldpixel, pixel, op);
             }
         }
 
