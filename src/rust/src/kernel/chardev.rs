@@ -19,9 +19,8 @@ make_logging_macros!("chardev");
 /// # Invariants
 ///
 /// `dev` and `data` are valid, non-null pointers.
-#[doc(hidden)]
 #[derive(Debug)]
-struct _InternalRegistration<T> {
+struct InternalRegistration<T> {
     name: CString,
     dev: *mut bindings::nk_char_dev,
     data: *mut c_void,
@@ -40,10 +39,9 @@ struct _InternalRegistration<T> {
 // This is one of those `unsafe` lines that I cannot say with 100%
 // confidence are actually safe. See also the comment for
 // `irq::_InternalRegistration`.
-unsafe impl<T> Send for _InternalRegistration<T> {}
+unsafe impl<T> Send for InternalRegistration<T> {}
 
-#[doc(hidden)]
-impl<T> _InternalRegistration<T> {
+impl<T> InternalRegistration<T> {
     /// Registers a character device with Nautilus' character device subsytem.
     unsafe fn try_new(
         name: &str,
@@ -91,7 +89,7 @@ impl<T> _InternalRegistration<T> {
     }
 }
 
-impl<T> Drop for _InternalRegistration<T> {
+impl<T> Drop for InternalRegistration<T> {
     fn drop(&mut self) {
         debug!("Dropping a registration for device {:?}.", self.name);
 
@@ -175,7 +173,7 @@ pub trait CharDev {
 
 /// The registration of a character device.
 #[derive(Debug)]
-pub struct Registration<C: CharDev>(_InternalRegistration<C::State>);
+pub struct Registration<C: CharDev>(InternalRegistration<C::State>);
 
 impl<C: CharDev> Registration<C> {
     unsafe extern "C" fn status(raw_state: *mut c_void) -> c_int {
@@ -262,7 +260,7 @@ impl<C: CharDev> Registration<C> {
         // The call to `Box::from_raw` matches the call to `Box::into_raw` in the
         // error case.
         Ok(Self(unsafe {
-            _InternalRegistration::try_new(name, interface_ptr, data)
+            InternalRegistration::try_new(name, interface_ptr, data)
                 .inspect_err(|_| { let _ = Box::from_raw(interface_ptr); })?
         }))
     }

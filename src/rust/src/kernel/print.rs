@@ -2,7 +2,6 @@ use super::bindings;
 use core::fmt;
 
 // A ZST that wraps nk_vc_print
-#[doc(hidden)]
 struct _VcWriter;
 
 impl fmt::Write for _VcWriter {
@@ -49,7 +48,6 @@ extern "C" {
 }
 
 // A ZST for debug/error printing
-#[doc(hidden)]
 struct _LogWriter;
 
 impl fmt::Write for _LogWriter {

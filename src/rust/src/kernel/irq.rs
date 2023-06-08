@@ -15,9 +15,8 @@ make_logging_macros!("irq");
 /// # Invariants
 ///
 /// `data` is a valid, non-null pointer.
-#[doc(hidden)]
 #[derive(Debug)]
-struct _InternalRegistration<T> {
+struct InternalRegistration<T> {
     int_vec: u16,
     data: *mut c_void,
     _p: PhantomData<Arc<T>>,
@@ -39,10 +38,9 @@ struct _InternalRegistration<T> {
 // `impl` is truly safe, and if you are noticing odd behavior with
 // interrupts (e.g. data races), then you may want to consider the
 // implications of this line.
-unsafe impl<T> Send for _InternalRegistration<T> {}
+unsafe impl<T> Send for InternalRegistration<T> {}
 
-#[doc(hidden)]
-impl<T> _InternalRegistration<T> {
+impl<T> InternalRegistration<T> {
     /// Registers a new irq handler.
     unsafe fn try_new(
         irq: u16,
@@ -82,7 +80,7 @@ impl<T> _InternalRegistration<T> {
     }
 }
 
-impl<T> Drop for _InternalRegistration<T> {
+impl<T> Drop for InternalRegistration<T> {
     fn drop(&mut self) {
         debug!("Dropping a registration for IRQ {}.", self.int_vec);
 
@@ -106,14 +104,14 @@ pub trait Handler {
 
 /// The registration of an interrupt handler.
 #[derive(Debug)]
-pub struct Registration<H: Handler>(_InternalRegistration<H::State>);
+pub struct Registration<H: Handler>(InternalRegistration<H::State>);
 
 impl<H: Handler> Registration<H> {
     /// Registers a new irq handler.
     pub fn try_new(irq: u16, data: Arc<H::State>) -> Result<Self> {
         // SAFETY: `handler` only calls `Arc::clone` on `raw_state`.
         Ok(Self(unsafe {
-            _InternalRegistration::try_new(irq, Some(Self::handler), data)?
+            InternalRegistration::try_new(irq, Some(Self::handler), data)?
         }))
     }
 
